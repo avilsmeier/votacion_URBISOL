@@ -1,0 +1,23 @@
+<%- include('layout', { title: "Impresión padrón", body: `
+  <div class="card">
+    <h2>Vista impresión - ${election.title}</h2>
+    <p class="muted">Imprime desde el navegador (Ctrl+P).</p>
+
+    <table style="width:100%; border-collapse:collapse">
+      <tr>
+        <th align="left">Unidad</th>
+        <th align="left">Registro</th>
+        <th align="left">Token</th>
+        <th align="left">Votó digital</th>
+      </tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${r.unidad}</td>
+          <td>${r.registro_estado}</td>
+          <td>${r.token_estado}</td>
+          <td><b>${r.voto_emitido}</b></td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>

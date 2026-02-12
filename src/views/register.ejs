@@ -1,0 +1,54 @@
+<%- include('layout', { title: election.title, body: `
+  <div class="card">
+    <h2>${election.title}</h2>
+    ${regOpen ? `
+      <p class="muted">Registro para voto digital. Correo y teléfono son obligatorios para enviar el enlace único.</p>
+
+      <form method="POST" action="/registro">
+        <label>Calle</label>
+        <select name="street" required>
+          <option value="">Selecciona...</option>
+          ${streets.map(s => `<option value="${s}">${s}</option>`).join("")}
+        </select>
+
+        <div class="row">
+          <div>
+            <label>Número (obligatorio)</label>
+            <input name="number" required />
+          </div>
+          <div>
+            <label>Piso/Depto (opcional)</label>
+            <input name="unit_extra" />
+          </div>
+        </div>
+
+        <label>Nombre y apellidos</label>
+        <input name="name" required />
+
+        <div class="row">
+          <div>
+            <label>DNI</label>
+            <input name="dni" inputmode="numeric" required />
+          </div>
+          <div>
+            <label>Teléfono</label>
+            <input name="phone" inputmode="tel" required />
+          </div>
+        </div>
+
+        <label>Correo (obligatorio)</label>
+        <input name="email" type="email" required />
+
+        <p class="muted" style="margin-top:12px">
+          El Comité Electoral revisará esta solicitud. Si es aprobada, se enviará un enlace único por correo.
+        </p>
+
+        <button class="ok" type="submit">Enviar solicitud</button>
+      </form>
+    ` : `
+      <h3>Registro cerrado</h3>
+      <p class="muted">El periodo de registro para voto digital ha finalizado.</p>
+      <a href="/"><button>Volver</button></a>
+    `}
+  </div>
+` }) %>

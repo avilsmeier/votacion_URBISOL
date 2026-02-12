@@ -1,0 +1,16 @@
+PORT=3000
+BASE_URL=https://website_url
+
+DATABASE_URL=postgres://user:pass@127.0.0.1:5432/db_name
+
+SESSION_SECRET=SecretoLargo
+TOKEN_SECRET=OtroSecretoLargo
+
+# Email opcional (si quieres enviar links por correo)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=urbisol@gmail.com
+SMTP_PASS=xxx
+SMTP_FROM="Comité Electoral <urbisol@gmail.com>"
+
+TZ=America/Lima

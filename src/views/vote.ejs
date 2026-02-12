@@ -1,0 +1,18 @@
+<%- include('layout', { title: settings.title, body: `
+  <div class="card">
+    <h2>${settings.title}</h2>
+    <p class="muted">Elige una lista y confirma. Este enlace es de uso único.</p>
+
+    <form method="POST" action="/votar/${token}">
+      ${candidates.map(c => `
+        <label style="font-weight:600; margin-top:12px">
+          <input type="radio" name="candidate_id" value="${c.id}" required style="width:auto; margin-right:8px"/>
+          ${c.name}
+        </label>
+      `).join('')}
+
+      <button class="ok" style="margin-top:14px" type="submit">Confirmar voto</button>
+      <p class="muted" style="margin-top:10px">Si cierras esta página antes de confirmar, no se registra el voto.</p>
+    </form>
+  </div>
+` }) %>

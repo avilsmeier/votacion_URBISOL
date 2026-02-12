@@ -1,0 +1,36 @@
+<%- include('layout', { title: "Solicitudes", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Solicitudes - ${election.title}</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <a href="/admin/solicitudes?filter=pending"><button class="${filter==='pending'?'ok':''}">Pendientes</button></a>
+      <a href="/admin/solicitudes?filter=approved"><button class="${filter==='approved'?'ok':''}">Aprobadas</button></a>
+      <a href="/admin/solicitudes?filter=rejected"><button class="${filter==='rejected'?'ok':''}">Rechazadas</button></a>
+      <a href="/admin/solicitudes?filter=all"><button class="${filter==='all'?'ok':''}">Todas</button></a>
+    </div>
+
+    <p class="muted" style="margin-top:10px">
+      Tip: normalmente el comité trabaja solo con “Pendientes”.
+    </p>
+
+    <table style="width:100%; border-collapse:collapse">
+      <tr>
+        <th align="left">Fecha</th>
+        <th align="left">Unidad</th>
+        <th align="left">Nombre</th>
+        <th align="left">Estado</th>
+      </tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${new Date(r.created_at).toLocaleString("es-PE")}</td>
+          <td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>
+          <td>${r.name}</td>
+          <td><b>${r.status}</b></td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>

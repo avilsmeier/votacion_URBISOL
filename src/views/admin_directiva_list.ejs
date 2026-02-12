@@ -1,0 +1,34 @@
+<%- include('layout', { title: "Listas Directiva", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Listas de Directiva - ${election.title}</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    ${admin.role==="admin" ? `<a href="/admin/directiva/new"><button class="ok">Agregar lista</button></a>` : ``}
+
+    <table style="width:100%; border-collapse:collapse; margin-top:12px">
+      <tr>
+        <th align="left">Orden</th>
+        <th align="left">Nombre</th>
+        <th align="left">Plan</th>
+        <th align="left">Acciones</th>
+      </tr>
+      ${lists.map(l => `
+        <tr style="border-top:1px solid #eee">
+          <td>${l.sort_order}</td>
+          <td>${l.name}</td>
+          <td>${l.plan_pdf_path ? `<a href="${l.plan_pdf_path}" target="_blank">Ver PDF</a>` : `-`}</td>
+          <td>
+            ${admin.role==="admin" ? `
+              <a href="/admin/directiva/${l.id}/edit">Editar</a>
+              | <form style="display:inline" method="POST" action="/admin/directiva/${l.id}/delete" onsubmit="return confirm('Eliminar lista?')">
+                  <button class="bad" type="submit">Eliminar</button>
+                </form>
+            ` : `<span class="muted">Solo lectura</span>`}
+          </td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>

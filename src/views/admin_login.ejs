@@ -1,0 +1,13 @@
+<%- include('layout', { title: "Admin", body: `
+  <div class="card">
+    <h2>Panel Comité Electoral</h2>
+    ${error ? `<p style="color:#c33; font-weight:700">${error}</p>` : ``}
+    <form method="POST" action="/admin/login">
+      <label>Email</label>
+      <input name="email" type="email" required />
+      <label>Password</label>
+      <input name="password" type="password" required />
+      <button class="ok" type="submit">Ingresar</button>
+    </form>
+  </div>
+` }) %>

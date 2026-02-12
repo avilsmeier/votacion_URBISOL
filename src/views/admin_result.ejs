@@ -1,0 +1,45 @@
+<%- include('layout', { title: "Resultados (Admin)", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Resultados - ${election.title}</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    <p class="muted">Resultados de votación digital (solo lectura para Comité Electoral).</p>
+
+    <div style="margin-top:10px">
+      <p><b>Votos digitales emitidos:</b> ${metrics.votes}</p>
+      <p><b>Registros aprobados:</b> ${metrics.approved_regs}</p>
+      <p><b>Solicitudes pendientes:</b> ${metrics.pending_regs}</p>
+    </div>
+
+    <hr/>
+    <h3>Totales por lista</h3>
+
+    <table style="width:100%; border-collapse:collapse">
+      <tr>
+        <th align="left">Lista</th>
+        <th align="left">Votos</th>
+      </tr>
+      ${totals.map(t => `
+        <tr style="border-top:1px solid #eee">
+          <td>${t.name}</td>
+          <td><b>${t.votes}</b></td>
+        </tr>
+      `).join("")}
+    </table>
+
+    <hr/>
+    <h3>Exportar</h3>
+    <div class="row" style="margin-top:10px">
+      <a href="/admin/export/resultados.csv"><button>Resultados (CSV)</button></a>
+      <a href="/admin/acta.pdf"><button>Acta (PDF)</button></a>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <a href="/admin/export/padron_estado.csv"><button>Padrón/Estado (CSV)</button></a>
+      <a href="/admin/export/auditoria.csv"><button>Auditoría (CSV)</button></a>
+    </div>
+
+  </div>
+` }) %>

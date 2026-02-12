@@ -1,0 +1,36 @@
+<%- include('layout', { title: "Listas Fiscales", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Listas de Fiscales - ${election.title}</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    ${admin.role==="admin" ? `<a href="/admin/fiscales/new"><button class="ok">Agregar lista fiscal</button></a>` : ``}
+
+    <table style="width:100%; border-collapse:collapse; margin-top:12px">
+      <tr>
+        <th align="left">Orden</th>
+        <th align="left">Nombre</th>
+        <th align="left">Titular</th>
+        <th align="left">Suplente</th>
+        <th align="left">Acciones</th>
+      </tr>
+      ${lists.map(l => `
+        <tr style="border-top:1px solid #eee">
+          <td>${l.sort_order}</td>
+          <td>${l.name}</td>
+          <td>${l.titular_name} ${l.titular_dni ? "(" + l.titular_dni + ")" : ""}</td>
+          <td>${l.suplente_name} ${l.suplente_dni ? "(" + l.suplente_dni + ")" : ""}</td>
+          <td>
+            ${admin.role==="admin" ? `
+              <a href="/admin/fiscales/${l.id}/edit">Editar</a>
+              | <form style="display:inline" method="POST" action="/admin/fiscales/${l.id}/delete" onsubmit="return confirm('Eliminar lista fiscal?')">
+                  <button class="bad" type="submit">Eliminar</button>
+                </form>
+            ` : `<span class="muted">Solo lectura</span>`}
+          </td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>

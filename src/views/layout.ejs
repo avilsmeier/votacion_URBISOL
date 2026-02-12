@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title><%= title || "Votación" %></title>
+  <style>
+    body { font-family: system-ui, Arial; background:#f7f7f7; margin:0; }
+    .wrap { max-width: 720px; margin: 24px auto; padding: 0 12px; }
+    .card { background:#fff; border:1px solid #ddd; border-radius: 12px; padding: 16px; }
+    label { display:block; margin-top: 10px; font-weight: 600; }
+    input, select, button, textarea { width:100%; padding: 10px; border-radius:10px; border:1px solid #ccc; margin-top:6px; }
+    button { cursor:pointer; font-weight:700; }
+    .row { display:flex; gap:12px; }
+    .row > * { flex:1; }
+    .muted { color:#666; font-size: 14px; }
+    .ok { background:#0a7; color:#fff; border:0; }
+    .bad { background:#c33; color:#fff; border:0; }
+    a { color:#06c; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; }
+    .pill { padding:6px 10px; border-radius: 999px; background:#eee; font-size: 13px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <%- body %>
+  </div>
+</body>
+</html>

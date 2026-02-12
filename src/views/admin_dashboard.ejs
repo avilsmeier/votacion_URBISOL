@@ -1,0 +1,83 @@
+<%- include('layout', { title: "Admin", body: `
+  <div class="card">
+    <div class="topbar">
+      <div>
+        <h2>Panel Comité Electoral</h2>
+        <div class="muted">${admin.email} · <span class="pill">${admin.role}</span></div>
+      </div>
+      <form method="POST" action="/admin/logout">
+        <button type="submit">Salir</button>
+      </form>
+    </div>
+
+    ${active ? `
+      <h3>Elección activa</h3>
+      <p><b>${active.title}</b></p>
+      <p class="muted">Registro: ${new Date(active.reg_open_at).toLocaleString("es-PE")} → ${new Date(active.reg_close_at).toLocaleString("es-PE")}</p>
+      <p class="muted">Votación: ${new Date(active.vote_open_at).toLocaleString("es-PE")} → ${new Date(active.vote_close_at).toLocaleString("es-PE")}</p>
+
+      <p><b>Pendientes:</b> ${stats.pending_regs} · <b>Aprobados:</b> ${stats.approved_regs} · <b>Votos:</b> ${stats.votes}</p>
+      <p class="muted">Envío por email: ${canMail ? "Configurado ✅" : "No configurado ❌"}</p>
+
+      <div class="row" style="margin-top:12px">
+        <a href="/admin/solicitudes?filter=pending"><button class="ok">Solicitudes</button></a>
+        <a href="/admin/resultados"><button class="ok">Resultados</button></a>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <a href="/admin/directiva"><button class="ok">Listas</button></a>
+        <a href="/admin/fiscales"><button class="ok">Fiscales</button></a>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <a href="/admin/election/edit"><button class="ok">Editar Campaña</button></a>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <a href="/admin/padron_v2.pdf"><button>Padrón (PDF)</button></a>
+        <a href="/admin/acta.pdf"><button>Acta (PDF)</button></a>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <a href="/admin/export/padron_estado.csv"><button>Export Padrón/Estado (CSV)</button></a>
+        <a href="/admin/print/padron"><button>Vista Impresión</button></a>
+      </div>
+      
+      <div class="row" style="margin-top:10px">
+        <a href="/admin/export/resultados.csv"><button>Export Resultados (CSV)</button></a>
+      </div>
+
+    ` : `
+      <p>No hay elección activa.</p>
+    `}
+
+    ${admin.role === "admin" ? `
+      <hr/>
+      <h3>Campañas</h3>
+      <a href="/admin/elections/new"><button class="ok">Crear nueva elección</button></a>
+    ` : ``}
+
+    <hr/>
+    <h3>Histórico</h3>
+    <table style="width:100%; border-collapse:collapse">
+      <tr><th align="left">ID</th><th align="left">Título</th><th align="left">Activa</th><th align="left">Acciones</th></tr>
+      ${elections.map(e => `
+        <tr style="border-top:1px solid #eee">
+          <td>${e.id}</td>
+          <td>${e.title}</td>
+          <td>${e.is_active ? "Sí" : "No"}</td>
+          <td>
+            <a href="/resultados/${e.id}">Resultados</a>
+            ${admin.role==="admin" && !e.is_active ? `
+              | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>
+            ` : ``}
+            ${admin.role==="admin" && e.is_active ? `
+              | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/close"><button type="submit">Cerrar</button></form>
+            ` : ``}
+          </td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
+0

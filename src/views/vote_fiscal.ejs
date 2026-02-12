@@ -1,0 +1,21 @@
+<%- include('layout', { title: "Votar Fiscales", body: `
+  <div class="card">
+    <h2>Voto 2 de 2: Lista de Fiscales</h2>
+    <p class="muted">Este es el segundo y último paso.</p>
+
+    <form method="POST" action="/votar/${token}/fiscales">
+      ${fiscalLists.map(f => `
+        <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin:10px 0">
+          <label style="display:block; cursor:pointer">
+            <input type="radio" name="fiscal_list_id" value="${f.id}" required />
+            <b>${f.name}</b>
+          </label>
+          <div class="muted">Titular: ${f.titular_name}${f.titular_dni ? " ("+f.titular_dni+")" : ""}</div>
+          <div class="muted">Suplente: ${f.suplente_name}${f.suplente_dni ? " ("+f.suplente_dni+")" : ""}</div>
+        </div>
+      `).join("")}
+
+      <button class="ok" type="submit">Confirmar voto de Fiscales</button>
+    </form>
+  </div>
+` }) %>

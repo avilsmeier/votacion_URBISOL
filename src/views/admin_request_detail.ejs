@@ -1,0 +1,49 @@
+<%- include('layout', { title: "Solicitud", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Solicitud</h2>
+      <a href="/admin/solicitudes">Volver</a>
+    </div>
+
+    <p><b>Unidad:</b> ${r.unit_label}</p>
+    <p><b>Nombre:</b> ${r.name}</p>
+    <p><b>DNI:</b> ${r.dni}</p>
+    <p><b>Teléfono:</b> ${r.phone}</p>
+    <p><b>Email:</b> ${r.email || "-"}</p>
+    <p><b>Estado:</b> ${r.status}</p>
+
+    ${new URLSearchParams(globalThis.location?.search || "").get("link") ? "" : ""}
+
+    ${r.status === "PENDING" && admin.role === "admin" ? `
+      <hr/>
+      <h3>Aprobar</h3>
+      <form method="POST" action="/admin/solicitudes/${r.id}/aprobar">
+        <label>Canal</label>
+        <select name="via">
+          <option value="COPY">Copiar enlace (para enviar manual)</option>
+          <option value="EMAIL">Enviar por email (si está configurado)</option>
+        </select>
+        <button class="ok" type="submit">Aprobar y generar enlace</button>
+      </form>
+
+      <hr/>
+      <h3>Rechazar</h3>
+      <form method="POST" action="/admin/solicitudes/${r.id}/rechazar">
+        <label>Motivo (opcional)</label>
+        <textarea name="notes"></textarea>
+        <button class="bad" type="submit">Rechazar</button>
+      </form>
+    ` : ``}
+
+    <hr/>
+    <h3>Token</h3>
+    <p class="muted">Si aprobaste, el enlace se muestra en la URL con ?link=...</p>
+    <p class="muted">Tip: después de aprobar, copia el link desde la barra del navegador (parámetro link) y envíalo al vecino.</p>
+
+    ${tokenRow ? `
+      <p><b>Estado token:</b> ${tokenRow.status}</p>
+      <p><b>Emitido:</b> ${new Date(tokenRow.issued_at).toLocaleString()}</p>
+      <p><b>Usado:</b> ${tokenRow.used_at ? new Date(tokenRow.used_at).toLocaleString() : "-"}</p>
+    ` : `<p class="muted">Aún no se generó token.</p>`}
+  </div>
+` }) %>

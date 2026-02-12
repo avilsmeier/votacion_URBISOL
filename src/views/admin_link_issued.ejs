@@ -1,0 +1,19 @@
+<%- include('layout', { title: "Enlace emitido", body: `
+  <div class="card">
+    <h2>Enlace de votación emitido ✅</h2>
+    <p class="muted">Se intentó enviar por correo. Guarda este enlace como respaldo:</p>
+
+    <input value="${link}" readonly onclick="this.select();" />
+
+    <div class="row" style="margin-top:10px">
+      <button onclick="navigator.clipboard.writeText('${link}')">Copiar</button>
+      <form method="POST" action="/admin/solicitudes/${registrationId}/reemitir">
+        <button class="bad" type="submit">Reemitir (anula el anterior)</button>
+      </form>
+    </div>
+
+    <div style="margin-top:12px">
+      <a href="/admin/solicitudes/${registrationId}">Volver a la solicitud</a>
+    </div>
+  </div>
+` }) %>

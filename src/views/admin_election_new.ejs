@@ -1,0 +1,36 @@
+<%- include('layout', { title: "Nueva elección", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Nueva elección</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    <p class="muted">
+      Selecciona fecha y hora (hora Lima). No hace falta escribir formatos.
+    </p>
+
+    <form method="POST" action="/admin/elections/new">
+      <label>Título</label>
+      <input name="title" required />
+
+      <label>Registro abre</label>
+      <input name="reg_open_at" type="datetime-local" required />
+
+      <label>Registro cierra</label>
+      <input name="reg_close_at" type="datetime-local" required />
+
+      <label>Votación abre</label>
+      <input name="vote_open_at" type="datetime-local" required />
+
+      <label>Votación cierra</label>
+      <input name="vote_close_at" type="datetime-local" required />
+
+      <button class="ok" type="submit">Crear</button>
+    </form>
+
+    <hr/>
+    <p class="muted">
+      Tip: si tu servidor está con TZ=America/Lima, esto queda exacto.
+    </p>
+  </div>
+` }) %>

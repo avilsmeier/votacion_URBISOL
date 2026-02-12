@@ -1,0 +1,46 @@
+<%
+  const openAt = new Date(election.vote_open_at).getTime();
+  const now = Date.now();
+  const ms = Math.max(0, openAt - now);
+  const mins = Math.floor(ms / 60000);
+  const hrs = Math.floor(mins / 60);
+  const remMin = mins % 60;
+%>
+
+<%- include('layout', { title: "Tu votación", body: `
+  <div class="card">
+    <h2>${election.title}</h2>
+    <p class="muted">
+      La votación aún no está abierta. Tu enlace es válido.
+    </p>
+
+    <p><b>Falta:</b> ${hrs}h ${remMin}m (aprox.)</p>
+    <p class="muted">Apertura: ${new Date(election.vote_open_at).toLocaleString("es-PE")}</p>
+
+    <hr/>
+    <h3>Listas Directiva</h3>
+    ${councilLists.length ? councilLists.map(l => `
+      <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin:10px 0">
+        <b>${l.name}</b>
+        ${l.plan_pdf_path ? ` · <a href="${l.plan_pdf_path}" target="_blank">Plan (PDF)</a>` : ``}
+        <ul style="margin:8px 0 0 18px">
+          ${l.members.map(m => `<li>${m.role}: ${m.full_name}${m.dni_ce ? " ("+m.dni_ce+")" : ""}</li>`).join("")}
+        </ul>
+      </div>
+    `).join("") : `<p class="muted">Aún no se han cargado listas.</p>`}
+
+    <hr/>
+    <h3>Listas de Fiscales</h3>
+    ${fiscalLists.length ? fiscalLists.map(f => `
+      <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin:10px 0">
+        <b>${f.name}</b>
+        <div class="muted">Titular: ${f.titular_name}${f.titular_dni ? " ("+f.titular_dni+")" : ""}</div>
+        <div class="muted">Suplente: ${f.suplente_name}${f.suplente_dni ? " ("+f.suplente_dni+")" : ""}</div>
+      </div>
+    `).join("") : `<p class="muted">Aún no se han cargado listas de fiscales.</p>`}
+
+    <p class="muted" style="margin-top:14px">
+      Puedes volver a entrar a este enlace cuando la votación esté abierta.
+    </p>
+  </div>
+` }) %>

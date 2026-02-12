@@ -1,0 +1,31 @@
+<%- include('layout', { title: election.title, body: `
+  <div class="card">
+    <h2>${election.title}</h2>
+    <p class="muted">Votación digital opcional (complementaria a la urna física).</p>
+
+    <p><b>Registro:</b> ${regOpen ? "ABIERTO ✅" : "CERRADO ❌"}</p>
+    <p><b>Votación:</b> ${voteOpen ? "ABIERTA ✅" : "CERRADA ❌"}</p>
+
+    <hr/>
+    <p><b>Solicitudes pendientes:</b> ${metrics.pending_regs}</p>
+    <p><b>Registros aprobados:</b> ${metrics.approved_regs}</p>
+    <p><b>Votos digitales emitidos:</b> ${metrics.votes}</p>
+
+    <div class="row" style="margin-top:14px">
+      <a href="/registro"><button class="ok" ${regOpen ? "" : "disabled"}>Registrarme</button></a>
+      <a href="/resultados/${election.id}"><button>Ver resultados</button></a>
+    </div>
+
+    <div style="margin-top:10px">
+      <a href="/admin/login">Ingreso Comité Electoral</a>
+    </div>
+
+    ${previous.length ? `
+      <hr/>
+      <h3>Resultados anteriores</h3>
+      <ul>
+        ${previous.map(p => `<li><a href="/resultados/${p.id}">${p.title}</a></li>`).join("")}
+      </ul>
+    ` : ``}
+  </div>
+` }) %>

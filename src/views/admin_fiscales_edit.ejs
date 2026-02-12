@@ -1,0 +1,32 @@
+<%- include('layout', { title: "Editar lista fiscal", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>${mode==="new" ? "Nueva lista fiscal" : "Editar lista fiscal"}</h2>
+      <a href="/admin/fiscales">Volver</a>
+    </div>
+
+    <form method="POST" action="${mode==="new" ? "/admin/fiscales/new" : ("/admin/fiscales/" + item.id + "/edit")}">
+      <label>Nombre de la lista fiscal</label>
+      <input name="name" value="${item ? item.name : ""}" required />
+
+      <label>Orden</label>
+      <input name="sort_order" value="${item ? item.sort_order : 0}" inputmode="numeric" />
+
+      <hr/>
+      <h3>Fiscal Titular</h3>
+      <label>Nombre completo</label>
+      <input name="titular_name" value="${item ? item.titular_name : ""}" required />
+      <label>DNI/CE (opcional)</label>
+      <input name="titular_dni" value="${item ? (item.titular_dni||"") : ""}" />
+
+      <hr/>
+      <h3>Fiscal Suplente</h3>
+      <label>Nombre completo</label>
+      <input name="suplente_name" value="${item ? item.suplente_name : ""}" required />
+      <label>DNI/CE (opcional)</label>
+      <input name="suplente_dni" value="${item ? (item.suplente_dni||"") : ""}" />
+
+      <button class="ok" type="submit">Guardar</button>
+    </form>
+  </div>
+` }) %>

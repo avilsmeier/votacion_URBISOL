@@ -1,0 +1,20 @@
+<%- include('layout', { title: "Resultados", body: `
+  <div class="card">
+    <h2>Resultados - ${election.title}</h2>
+    <p class="muted">Votos digitales emitidos: <b>${metrics.votes}</b></p>
+
+    <table style="width:100%; border-collapse:collapse">
+      <tr><th align="left">Lista</th><th align="left">Votos</th></tr>
+      ${totals.map(t => `
+        <tr style="border-top:1px solid #eee">
+          <td>${t.name}</td>
+          <td><b>${t.votes}</b></td>
+        </tr>
+      `).join("")}
+    </table>
+
+    <div style="margin-top:14px">
+      <a href="/"><button>Volver</button></a>
+    </div>
+  </div>
+` }) %>

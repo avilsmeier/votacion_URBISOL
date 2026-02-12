@@ -1,0 +1,25 @@
+<%- include('layout', { title: "Votar Directiva", body: `
+  <div class="card">
+    <h2>Voto 1 de 2: Concejo Directivo</h2>
+    <p class="muted">Elige una lista. Luego votarás por la lista de fiscales.</p>
+
+    <form method="POST" action="/votar/${token}">
+      ${councilLists.map(l => `
+        <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin:10px 0">
+          <label style="display:block; cursor:pointer">
+            <input type="radio" name="candidate_id" value="${l.id}" required />
+            <b>${l.name}</b>
+          </label>
+
+          ${l.plan_pdf_path ? `<div style="margin-top:6px"><a href="${l.plan_pdf_path}" target="_blank">Ver plan de trabajo (PDF)</a></div>` : ``}
+
+          <ul style="margin:8px 0 0 18px">
+            ${l.members.map(m => `<li>${m.role}: ${m.full_name}${m.dni_ce ? " ("+m.dni_ce+")" : ""}</li>`).join("")}
+          </ul>
+        </div>
+      `).join("")}
+
+      <button class="ok" type="submit">Confirmar voto de Directiva</button>
+    </form>
+  </div>
+` }) %>

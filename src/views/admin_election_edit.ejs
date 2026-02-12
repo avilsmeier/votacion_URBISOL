@@ -1,0 +1,36 @@
+<%- include('layout', { title: "Editar campaña", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Editar campaña - ${election.title}</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    <form method="POST" action="/admin/election/edit">
+      <label>Título</label>
+      <input name="title" value="${election.title}" required />
+
+      <label>Registro abre (Lima)</label>
+      <input name="reg_open_at" type="datetime-local" value="${vals.reg_open_at}" required />
+
+      <label>Registro cierra (Lima)</label>
+      <input name="reg_close_at" type="datetime-local" value="${vals.reg_close_at}" required />
+
+      <label>Votación abre (Lima)</label>
+      <input name="vote_open_at" type="datetime-local" value="${vals.vote_open_at}" required />
+
+      <label>Votación cierra (Lima)</label>
+      <input name="vote_close_at" type="datetime-local" value="${vals.vote_close_at}" required />
+
+      <label style="margin-top:10px">
+        <input type="checkbox" name="is_active" value="1" ${election.is_active ? "checked" : ""} />
+        Campaña activa
+      </label>
+
+      <button class="ok" type="submit">Guardar cambios</button>
+    </form>
+
+    <p class="muted" style="margin-top:10px">
+      Nota: la hora se guarda explícitamente con -05:00 (Lima).
+    </p>
+  </div>
+` }) %>

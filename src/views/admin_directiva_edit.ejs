@@ -1,0 +1,61 @@
+<%
+  function getMember(role) {
+    const m = (members || []).find(x => x.role === role);
+    return m ? { name: m.full_name, dni: m.dni_ce || "" } : { name: "", dni: "" };
+  }
+  const roles = ["Presidente","Vicepresidente","Secretario","Tesorero","Personero"];
+%>
+
+<%- include('layout', { title: "Editar Lista", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>${mode==="new" ? "Nueva lista Directiva" : "Editar lista Directiva"}</h2>
+      <a href="/admin/directiva">Volver</a>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" action="${mode==="new" ? "/admin/directiva/new" : ("/admin/directiva/" + list.id + "/edit")}">
+      <label>Nombre de la lista</label>
+      <input name="name" value="${list ? list.name : ""}" required />
+
+      <label>Orden (para mostrar en pantalla)</label>
+      <input name="sort_order" value="${list ? list.sort_order : 0}" inputmode="numeric" />
+
+      <hr/>
+      <h3>Integrantes (roles fijos)</h3>
+
+      ${roles.map(role => {
+        const m = getMember(role);
+        const optional = role==="Personero" ? `<span class="muted">(opcional)</span>` : ``;
+        return `
+          <div style="margin:10px 0; padding:10px; border:1px solid #eee; border-radius:10px">
+            <b>${role}</b> ${optional}
+            <div class="row" style="margin-top:8px">
+              <div>
+                <label>Nombre completo</label>
+                <input name="role_${role}_name" value="${m.name}" ${role==="Personero" ? "" : "required"} />
+              </div>
+              <div>
+                <label>DNI/CE</label>
+                <input name="role_${role}_dni" value="${m.dni}" />
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("")}
+
+      <hr/>
+      <h3>Plan de trabajo (PDF)</h3>
+      <p class="muted">Se almacena localmente con URL aleatoria.</p>
+
+      ${list && list.plan_pdf_path ? `
+        <p>Actual: <a target="_blank" href="${list.plan_pdf_path}">Ver PDF</a></p>
+        <label><input type="checkbox" name="remove_pdf" value="1" /> Quitar PDF</label>
+      ` : ``}
+
+      <label>Subir PDF (opcional)</label>
+      <input type="file" name="plan_pdf" accept="application/pdf" />
+
+      <button class="ok" type="submit">Guardar</button>
+    </form>
+  </div>
+` }) %>
