@@ -40,89 +40,6 @@ function getUserAgent(req) {
   return String(req.headers["user-agent"] || "") || null;
 }
 
-async function computeGlobalHash(client, electionId, kind /* 'COUNCIL' | 'FISCAL' */) {
-  const table = kind === "FISCAL" ? "fiscal_votes" : "votes";
-
-  const rows = (await client.query(
-    `SELECT vote_hash
-     FROM ${table}
-     WHERE election_id=$1
-     ORDER BY chain_position ASC`,
-    [electionId]
-  )).rows;
-
-  const concatenated = rows.map(r => r.vote_hash).join("");
-
-  const globalHash = crypto
-    .createHash("sha256")
-    .update(concatenated, "utf8")
-    .digest("hex");
-
-  return {
-    globalHash,
-    totalVotes: rows.length
-  };
-}
-
-app.post("/admin/seal", requireAdmin, async (req, res) => {
-  const election = await getActiveElection();
-  if (!election) return res.status(400).send("No hay elección activa.");
-
-  const c = await pool.connect();
-  try {
-    await c.query("BEGIN");
-
-    // 🔒 lock por seguridad
-    await c.query("SELECT pg_advisory_xact_lock($1, $2)", [99, election.id]);
-
-    // Council
-    const council = await computeGlobalHash(c, election.id, "COUNCIL");
-
-    await c.query(
-      `INSERT INTO election_seals
-       (election_id, kind, global_hash, total_votes, created_by_admin_id)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (election_id, kind) DO NOTHING`,
-      [election.id, "COUNCIL", council.globalHash, council.totalVotes, req.session.admin.id]
-    );
-
-    // Fiscal
-    const fiscal = await computeGlobalHash(c, election.id, "FISCAL");
-
-    await c.query(
-      `INSERT INTO election_seals
-       (election_id, kind, global_hash, total_votes, created_by_admin_id)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (election_id, kind) DO NOTHING`,
-      [election.id, "FISCAL", fiscal.globalHash, fiscal.totalVotes, req.session.admin.id]
-    );
-
-    await c.query("COMMIT");
-
-    await audit("ELECTION_SEALED", {
-      election_id: election.id,
-      meta_json: {
-        council_hash: council.globalHash,
-        fiscal_hash: fiscal.globalHash
-      }
-    });
-
-    res.render("seal_result", {
-      election,
-      council,
-      fiscal
-    });
-
-  } catch (e) {
-    await c.query("ROLLBACK");
-    console.error(e);
-    res.status(500).send("Error sellando elección.");
-  } finally {
-    c.release();
-  }
-});
-
-
 // Ejecuta una función dentro de una transacción
 async function withTx(pool, fn) {
   const client = await pool.connect();
@@ -279,6 +196,137 @@ app.use(rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false
 }));
+
+async function computeGlobalHash(client, electionId, kind /* 'COUNCIL' | 'FISCAL' */) {
+  const table = kind === "FISCAL" ? "fiscal_votes" : "votes";
+
+  const rows = (await client.query(
+    `SELECT vote_hash
+     FROM ${table}
+     WHERE election_id=$1
+     ORDER BY chain_position ASC`,
+    [electionId]
+  )).rows;
+
+  const concatenated = rows.map(r => String(r.vote_hash || "")).join("");
+  const globalHash = crypto.createHash("sha256").update(concatenated, "utf8").digest("hex");
+
+  return { globalHash, totalVotes: rows.length };
+}
+
+app.post("/admin/seal", requireAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(400).send("No hay elección activa.");
+
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+
+    // Lock de sellado
+    await c.query("SELECT pg_advisory_xact_lock($1, $2)", [99, election.id]);
+
+    const council = await computeGlobalHash(c, election.id, "COUNCIL");
+    await c.query(
+      `INSERT INTO election_seals
+       (election_id, kind, global_hash, total_votes, created_by_admin_id)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (election_id, kind) DO NOTHING`,
+      [election.id, "COUNCIL", council.globalHash, council.totalVotes, req.session.admin.id]
+    );
+
+    const fiscal = await computeGlobalHash(c, election.id, "FISCAL");
+    await c.query(
+      `INSERT INTO election_seals
+       (election_id, kind, global_hash, total_votes, created_by_admin_id)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (election_id, kind) DO NOTHING`,
+      [election.id, "FISCAL", fiscal.globalHash, fiscal.totalVotes, req.session.admin.id]
+    );
+
+    await c.query("COMMIT");
+
+    await audit("ELECTION_SEALED", {
+      actor_admin_id: req.session.admin.id,
+      election_id: election.id,
+      meta_json: {
+        council_hash: council.globalHash,
+        fiscal_hash: fiscal.globalHash,
+        council_votes: council.totalVotes,
+        fiscal_votes: fiscal.totalVotes
+      }
+    });
+
+    return res.render("seal_result", { election, council, fiscal });
+  } catch (e) {
+    await c.query("ROLLBACK");
+    console.error(e);
+    return res.status(500).send("Error sellando elección.");
+  } finally {
+    c.release();
+  }
+});
+
+app.get("/admin/verify", requireViewerOrAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(500).send("No hay elección activa.");
+  res.render("verify", { result: null });
+});
+
+app.post("/admin/verify", requireViewerOrAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(500).send("No hay elección activa.");
+
+  const external = String(req.body?.external_hash || "").trim() || null;
+
+  const c = await pool.connect();
+  try {
+    const council = await computeGlobalHash(c, election.id, "COUNCIL");
+    const fiscal  = await computeGlobalHash(c, election.id, "FISCAL");
+
+    const seals = (await c.query(
+      `SELECT kind, global_hash
+       FROM election_seals
+       WHERE election_id=$1`,
+      [election.id]
+    )).rows;
+
+    const sealCouncil = seals.find(s => s.kind === "COUNCIL")?.global_hash || null;
+    const sealFiscal  = seals.find(s => s.kind === "FISCAL")?.global_hash || null;
+
+    let match = false;
+    let computed = `COUNCIL: ${council.globalHash}\nFISCAL: ${fiscal.globalHash}`;
+
+    if (external) {
+      match = (external === council.globalHash) || (external === fiscal.globalHash);
+    } else {
+      // compara contra lo sellado (si existe)
+      const mc = sealCouncil ? (sealCouncil === council.globalHash) : false;
+      const mf = sealFiscal ? (sealFiscal === fiscal.globalHash) : false;
+      match = mc && mf; // “todo ok” si coinciden ambos
+    }
+
+    await audit("VERIFY_RUN", {
+      actor_admin_id: req.session.admin?.id ?? null,
+      election_id: election.id,
+      meta_json: {
+        external_hash: external,
+        council_hash: council.globalHash,
+        fiscal_hash: fiscal.globalHash,
+        seal_council: sealCouncil,
+        seal_fiscal: sealFiscal,
+        match
+      }
+    });
+
+    res.render("verify", { result: { computed, match } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).send("Error verificando.");
+  } finally {
+    c.release();
+  }
+});
+
 
 const STREETS = [
   "Jr. El Visitador",
@@ -1131,6 +1179,7 @@ app.get("/admin/print/padron", requireViewerOrAdmin, async (req, res) => {
 ========================= */
 app.get("/admin/acta.pdf", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
+  if (!active) return res.status(500).send("No hay elección activa.");
 
   const totals = (await q(
     `SELECT c.name, COUNT(v.id)::int AS votes
@@ -1148,45 +1197,104 @@ app.get("/admin/acta.pdf", requireViewerOrAdmin, async (req, res) => {
     pending_regs: (await q(`SELECT COUNT(*)::int AS n FROM registrations WHERE election_id=$1 AND status='PENDING'`, [active.id])).rows[0].n
   };
 
+  // ---- Anti-cache duro ----
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `inline; filename="acta_election_${active.id}.pdf"`);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  // filename único por si algún proxy/browser insiste
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="acta_election_${active.id}_${Date.now()}.pdf"`
+  );
 
   const doc = new PDFDocument({ margin: 50 });
   doc.pipe(res);
 
+  // ---- Encabezado ----
   doc.fontSize(16).text("ACTA DE VOTACIÓN DIGITAL", { align: "center" });
   doc.moveDown(0.5);
+
   doc.fontSize(12).text(`Elección: ${active.title}`);
-  doc.text(`Fecha/Hora generación: ${new Date().toLocaleString("es-PE")}`);
-  doc.moveDown();
+  doc.text(
+    `Fecha/Hora generación (Lima): ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}`
+  );
 
-  doc.fontSize(12).text("Ventanas del proceso (hora Lima):");
-  doc.fontSize(11).text(`Registro: ${new Date(active.reg_open_at).toLocaleString("es-PE")}  →  ${new Date(active.reg_close_at).toLocaleString("es-PE")}`);
-  doc.fontSize(11).text(`Votación: ${new Date(active.vote_open_at).toLocaleString("es-PE")}  →  ${new Date(active.vote_close_at).toLocaleString("es-PE")}`);
-  doc.moveDown();
+  doc.moveDown(0.8);
 
-  doc.fontSize(12).text("Resultados (votación digital):");
-  doc.moveDown(0.5);
-  totals.forEach(t => doc.fontSize(11).text(`• ${t.name}: ${t.votes} votos`));
-  doc.moveDown();
+  doc.fontSize(11).text(`Total votos emitidos (Directiva): ${metrics.votes}`);
+  doc.text(`Registros aprobados: ${metrics.approved_regs}`);
+  doc.text(`Registros pendientes: ${metrics.pending_regs}`);
 
-  doc.fontSize(12).text("Métricas:");
-  doc.fontSize(11).text(`• Registros aprobados: ${metrics.approved_regs}`);
-  doc.fontSize(11).text(`• Registros pendientes: ${metrics.pending_regs}`);
-  doc.fontSize(11).text(`• Votos digitales emitidos: ${metrics.votes}`);
-  doc.moveDown(2);
+  doc.moveDown(1);
 
-  doc.fontSize(12).text("Firmas:", { underline: true });
-  doc.moveDown(2);
-  doc.text("______________________________      ______________________________");
-  doc.text("Presidente(a) Comité Electoral            Fiscal / Veedor");
-  doc.moveDown(1.5);
-  doc.text("______________________________      ______________________________");
-  doc.text("Miembro Comité Electoral                  Miembro Comité Electoral");
+  // ---- Resultados ----
+  doc.fontSize(13).text("Resultados - Concejo Directivo", { underline: true });
+  doc.moveDown(0.6);
+
+  // tabla simple
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+
+  const colX = { lista: left, votos: right - 120 };
+  doc.fontSize(11).text("Lista", colX.lista, doc.y, { continued: true });
+  doc.text("Votos", colX.votos, doc.y);
+  doc.moveDown(0.3);
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).stroke();
+  doc.moveDown(0.4);
+
+  for (const t of totals) {
+    if (doc.y > doc.page.height - 140) doc.addPage();
+
+    doc.fontSize(10).text(String(t.name ?? ""), colX.lista, doc.y, { width: (colX.votos - colX.lista - 10), continued: true });
+    doc.text(String(t.votes ?? 0), colX.votos, doc.y);
+    doc.moveDown(0.35);
+  }
+
+  doc.moveDown(1.2);
+
+  // ---- Firmas limpias (sin título) ----
+  const gap = 24;
+  const colW = (right - left - gap) / 2;
+  const x1 = left;
+  const x2 = left + colW + gap;
+  let sy = doc.y;
+
+  function signLine(x, y, label) {
+    doc.fontSize(10).text("______________________________", x, y, { width: colW });
+    doc.fontSize(9).text(label, x, y + 14, { width: colW });
+  }
+
+  // 3 filas
+  signLine(x1, sy, "Presidente(a) Comité Electoral");
+  signLine(x2, sy, "Miembro Comité Electoral");
+
+  sy += 46;
+  signLine(x1, sy, "Miembro Comité Electoral");
+  signLine(x2, sy, "Fiscal");
+
+  sy += 46;
+  signLine(x1, sy, "Personero(a) 1");
+  signLine(x2, sy, "Personero(a) 2");
+
+  // ---- Sello digital ----
+  doc.fontSize(8)
+    .fillColor("gray")
+    .text(
+      "Sistema de votación URBISOL 1.0",
+      0,
+      doc.page.height - 30,
+      { align: "center" }
+    );
+  doc.fillColor("black");
 
   doc.end();
 
-  await audit("ACTA_PDF_GENERATED", { actor_admin_id: req.session.admin.id, election_id: active.id });
+  await audit("ACTA_PDF_GENERATED", {
+    election_id: active.id,
+    meta_json: { votes: metrics.votes, approved_regs: metrics.approved_regs }
+  });
 });
 
 app.get("/admin/padron_v2.pdf", requireViewerOrAdmin, async (req, res) => {
