@@ -21,6 +21,241 @@ const app = express();
 app.set("view engine", "ejs");
 app.set("views", new URL("./views", import.meta.url).pathname);
 
+// SHA256 hex
+function sha256Hex(s) {
+  return crypto.createHash("sha256").update(s, "utf8").digest("hex");
+}
+
+// IP real (Cloudflare + proxies)
+function getReqIp(req) {
+  const raw =
+    req.headers["cf-connecting-ip"] ||
+    req.headers["x-forwarded-for"] ||
+    req.ip ||
+    "";
+  return String(raw).split(",")[0].trim() || null;
+}
+
+function getUserAgent(req) {
+  return String(req.headers["user-agent"] || "") || null;
+}
+
+async function computeGlobalHash(client, electionId, kind /* 'COUNCIL' | 'FISCAL' */) {
+  const table = kind === "FISCAL" ? "fiscal_votes" : "votes";
+
+  const rows = (await client.query(
+    `SELECT vote_hash
+     FROM ${table}
+     WHERE election_id=$1
+     ORDER BY chain_position ASC`,
+    [electionId]
+  )).rows;
+
+  const concatenated = rows.map(r => r.vote_hash).join("");
+
+  const globalHash = crypto
+    .createHash("sha256")
+    .update(concatenated, "utf8")
+    .digest("hex");
+
+  return {
+    globalHash,
+    totalVotes: rows.length
+  };
+}
+
+app.post("/admin/seal", requireAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(400).send("No hay elección activa.");
+
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+
+    // 🔒 lock por seguridad
+    await c.query("SELECT pg_advisory_xact_lock($1, $2)", [99, election.id]);
+
+    // Council
+    const council = await computeGlobalHash(c, election.id, "COUNCIL");
+
+    await c.query(
+      `INSERT INTO election_seals
+       (election_id, kind, global_hash, total_votes, created_by_admin_id)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (election_id, kind) DO NOTHING`,
+      [election.id, "COUNCIL", council.globalHash, council.totalVotes, req.session.admin.id]
+    );
+
+    // Fiscal
+    const fiscal = await computeGlobalHash(c, election.id, "FISCAL");
+
+    await c.query(
+      `INSERT INTO election_seals
+       (election_id, kind, global_hash, total_votes, created_by_admin_id)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (election_id, kind) DO NOTHING`,
+      [election.id, "FISCAL", fiscal.globalHash, fiscal.totalVotes, req.session.admin.id]
+    );
+
+    await c.query("COMMIT");
+
+    await audit("ELECTION_SEALED", {
+      election_id: election.id,
+      meta_json: {
+        council_hash: council.globalHash,
+        fiscal_hash: fiscal.globalHash
+      }
+    });
+
+    res.render("seal_result", {
+      election,
+      council,
+      fiscal
+    });
+
+  } catch (e) {
+    await c.query("ROLLBACK");
+    console.error(e);
+    res.status(500).send("Error sellando elección.");
+  } finally {
+    c.release();
+  }
+});
+
+
+// Ejecuta una función dentro de una transacción
+async function withTx(pool, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await fn(client);
+    await client.query("COMMIT");
+    return out;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Lock transaccional por campaña + tipo.
+ * Usamos advisory locks: no requieren filas “lockeables”
+ * y funcionan perfecto para serializar inserts.
+ */
+async function lockElectionChain(client, electionId, kind /* 'COUNCIL'|'FISCAL' */) {
+  // 1 y 2 son "namespaces" simples para separar cadenas
+  const ns = kind === "FISCAL" ? 2 : 1;
+  await client.query("SELECT pg_advisory_xact_lock($1, $2)", [ns, electionId]);
+}
+
+async function insertCouncilVoteChained(client, {
+  election_id,
+  unit_id,
+  candidate_id,
+  token_id,
+  ip,
+  user_agent
+}) {
+  await lockElectionChain(client, election_id, "COUNCIL");
+
+  // último bloque de la cadena (por campaña)
+  const last = (await client.query(
+    `SELECT chain_position, vote_hash
+     FROM votes
+     WHERE election_id=$1
+     ORDER BY chain_position DESC NULLS LAST, cast_at DESC, id DESC
+     LIMIT 1`,
+    [election_id]
+  )).rows[0];
+
+  const nextPos = (last?.chain_position ?? 0) + 1;
+  const previous_hash = last?.vote_hash ?? "GENESIS";
+
+  // fijamos cast_at desde DB (misma fuente de tiempo)
+  const cast_at = (await client.query("SELECT now() AS t")).rows[0].t;
+
+  const payload = {
+    election_id,
+    unit_id,
+    candidate_id,
+    token_id,
+    cast_at,
+    previous_hash,
+    chain_position: nextPos
+  };
+
+  const vote_hash = sha256Hex(JSON.stringify(payload));
+
+  const ins = await client.query(
+    `INSERT INTO votes (
+       unit_id, candidate_id, token_id, cast_at, ip, user_agent, election_id,
+       chain_position, previous_hash, vote_hash
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id`,
+    [
+      unit_id, candidate_id, token_id, cast_at, ip, user_agent, election_id,
+      nextPos, previous_hash, vote_hash
+    ]
+  );
+
+  return { id: ins.rows[0].id, chain_position: nextPos, previous_hash, vote_hash, cast_at };
+}
+
+async function insertFiscalVoteChained(client, {
+  election_id,
+  unit_id,
+  fiscal_list_id,
+  token_id,
+  ip,
+  user_agent
+}) {
+  await lockElectionChain(client, election_id, "FISCAL");
+
+  const last = (await client.query(
+    `SELECT chain_position, vote_hash
+     FROM fiscal_votes
+     WHERE election_id=$1
+     ORDER BY chain_position DESC NULLS LAST, cast_at DESC, id DESC
+     LIMIT 1`,
+    [election_id]
+  )).rows[0];
+
+  const nextPos = (last?.chain_position ?? 0) + 1;
+  const previous_hash = last?.vote_hash ?? "GENESIS";
+  const cast_at = (await client.query("SELECT now() AS t")).rows[0].t;
+
+  const payload = {
+    election_id,
+    unit_id,
+    fiscal_list_id,
+    token_id,
+    cast_at,
+    previous_hash,
+    chain_position: nextPos
+  };
+
+  const vote_hash = sha256Hex(JSON.stringify(payload));
+
+  const ins = await client.query(
+    `INSERT INTO fiscal_votes (
+       election_id, unit_id, fiscal_list_id, token_id, cast_at, ip, user_agent,
+       chain_position, previous_hash, vote_hash
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id`,
+    [
+      election_id, unit_id, fiscal_list_id, token_id, cast_at, ip, user_agent,
+      nextPos, previous_hash, vote_hash
+    ]
+  );
+
+  return { id: ins.rows[0].id, chain_position: nextPos, previous_hash, vote_hash, cast_at };
+}
+
+
 // Cloudflare/Nginx proxy
 app.set("trust proxy", 1);
 
@@ -47,7 +282,7 @@ app.use(rateLimit({
 
 const STREETS = [
   "Jr. El Visitador",
-  "Calle El Pacificado",
+  "Calle El Pacificador",
   "Calle El Inquisidor"
 ];
 
@@ -392,16 +627,14 @@ app.post("/votar/:token", async (req, res) => {
     const vt = t.rows[0];
     if (vt.status !== "ACTIVE") { await c.query("ROLLBACK"); return res.render("vote_used", { election }); }
 
-    await c.query(
-      `INSERT INTO votes(election_id, unit_id, candidate_id, token_id, ip, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [election.id, vt.unit_id, Number(candidate_id), vt.id, req.ip, req.headers["user-agent"] || ""]
-    );
-
-//    await c.query(
-//      `UPDATE vote_tokens SET status='USED', used_at=NOW() WHERE id=$1`,
-//      [vt.id]
-//    );
+  await insertCouncilVoteChained(c, {
+    election_id: election.id,
+    unit_id: vt.unit_id,
+    candidate_id: Number(candidate_id),
+    token_id: vt.id,
+    ip: req.headers["cf-connecting-ip"] || req.ip,
+    user_agent: req.headers["user-agent"] || ""
+  });
 
     await c.query("COMMIT");
 

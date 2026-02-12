@@ -47,6 +47,13 @@
         <a href="/admin/export/resultados.csv"><button>Export Resultados (CSV)</button></a>
       </div>
 
+      <div class="row" style="margin-top:14px">
+        <form method="POST" action="/admin/seal" style="display:inline">
+          <button class="ok" style="background:#8b0000">Cerrar y Sellar Elección</button>
+        </form>
+        <a href="/admin/verify"><button>Verificar Integridad</button></a>
+      </div>
+
     ` : `
       <p>No hay elección activa.</p>
     `}
@@ -80,4 +87,3 @@
     </table>
   </div>
 ` }) %>
-0

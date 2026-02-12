@@ -1,18 +1,105 @@
 <%- include('layout', { title: settings.title, body: `
+  <style>
+    .options { margin-top: 12px; }
+    .option-card{
+      border: 2px solid #d6d6d6;
+      border-radius: 12px;
+      padding: 14px 14px;
+      margin: 10px 0;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s ease, border-color .15s ease, transform .05s ease;
+    }
+    .option-card:hover{
+      border-color:#2b7cff;
+      background:#f2f7ff;
+    }
+    .option-card:active{
+      transform: scale(0.995);
+    }
+    .option-card.selected{
+      border-color:#2b7cff;
+      background:#eaf2ff;
+      box-shadow: 0 0 0 3px rgba(43,124,255,.12);
+    }
+    .option-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      font-weight: 700;
+    }
+    .check{
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 2px solid #b9b9b9;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 14px;
+      line-height: 1;
+      color: #fff;
+      background: transparent;
+      flex: 0 0 auto;
+    }
+    .option-card.selected .check{
+      border-color:#2b7cff;
+      background:#2b7cff;
+    }
+    .option-meta{
+      margin-top: 6px;
+      color:#666;
+      font-size: 0.95em;
+    }
+    .hidden-radio{ display:none; }
+    .actions{
+      margin-top: 14px;
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+    }
+  </style>
+
+  <script>
+    function selectCard(id){
+      const cards = document.querySelectorAll('.option-card');
+      cards.forEach(c => c.classList.remove('selected'));
+
+      const el = document.getElementById('card_' + id);
+      if(!el) return;
+      el.classList.add('selected');
+
+      const radio = document.getElementById('radio_' + id);
+      if(radio) radio.checked = true;
+
+      const btn = document.getElementById('confirmBtn');
+      if(btn) btn.disabled = false;
+    }
+  </script>
+
   <div class="card">
     <h2>${settings.title}</h2>
     <p class="muted">Elige una lista y confirma. Este enlace es de uso único.</p>
 
     <form method="POST" action="/votar/${token}">
-      ${candidates.map(c => `
-        <label style="font-weight:600; margin-top:12px">
-          <input type="radio" name="candidate_id" value="${c.id}" required style="width:auto; margin-right:8px"/>
-          ${c.name}
-        </label>
-      `).join('')}
+      <div class="options">
+        ${candidates.map(c => `
+          <div class="option-card" id="card_${c.id}" onclick="selectCard('${c.id}')">
+            <div class="option-title">
+              <span>${c.name}</span>
+              <span class="check">✓</span>
+            </div>
 
-      <button class="ok" style="margin-top:14px" type="submit">Confirmar voto</button>
-      <p class="muted" style="margin-top:10px">Si cierras esta página antes de confirmar, no se registra el voto.</p>
+            <input class="hidden-radio" id="radio_${c.id}" type="radio" name="candidate_id" value="${c.id}" required />
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="actions">
+        <button id="confirmBtn" class="ok" type="submit" disabled>Confirmar voto</button>
+        <p class="muted" style="margin:0">Si cierras esta página antes de confirmar, no se registra el voto.</p>
+      </div>
     </form>
   </div>
 ` }) %>

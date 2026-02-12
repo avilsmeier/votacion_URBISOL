@@ -1,0 +1,19 @@
+<h2>Verificación de Integridad</h2>
+
+<form method="POST" action="/admin/verify">
+  <label>Hash global (opcional para verificación histórica)</label>
+  <input type="text" name="external_hash" placeholder="Pegar hash aquí (opcional)" />
+  <button type="submit">Verificar</button>
+</form>
+
+<% if(result){ %>
+  <hr/>
+  <p><b>Hash calculado:</b></p>
+  <pre><%= result.computed %></pre>
+
+  <% if(result.match){ %>
+    <div style="color:green">✔ Coincide con hash registrado</div>
+  <% } else { %>
+    <div style="color:red">❌ No coincide</div>
+  <% } %>
+<% } %>
