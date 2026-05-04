@@ -29,6 +29,24 @@ function formatLima(dt) {
   return new Date(dt).toLocaleString("es-PE", { timeZone: "America/Lima" });
 }
 
+function header() {
+  return `${systemName()}\nConsejo Directivo\n`;
+}
+
+function footer() {
+  return `Atentamente,\nConsejo Directivo\nIsla del Sol`;
+}
+
+function block(title, body) {
+  if (!body) return "";
+  return `${title}:\n${body}`;
+}
+
+function safeSenderNote() {
+  const from = process.env.SMTP_FROM || "votacion@isladelsol.org";
+  return `Para no perder notificaciones importantes, agrega este remitente a tus contactos o lista segura:\n${from}\n\nSi no ves un correo esperado, revisa también la bandeja de Spam o Correo no deseado.`;
+}
+
 async function sendPlain({ to, subject, text }) {
   if (!canMail()) return false;
   const transport = makeTransport();
@@ -49,7 +67,7 @@ export async function sendAdminInvite({ to, role, secret, loginUrl }) {
   return sendPlain({
     to,
     subject: `Acceso al panel - ${systemName()}`,
-    text: `Hola,\n\nSe creó un acceso para el panel administrativo de ${systemName()}.\n\nRol: ${role}\nURL: ${loginUrl}\nUsuario: ${to}\nClave temporal: ${secret}\n\nPor seguridad, guarda estos datos y cambia la clave si corresponde.\n\n${supportEmail()}`
+    text: `${header()}\nHola,\n\nSe creó un acceso para el panel administrativo.\n\n${block("Rol", role)}\n\n${block("Página de ingreso", loginUrl)}\n\n${block("Usuario", to)}\n\n${block("Clave temporal", secret)}\n\nGuarda estos datos en un lugar seguro.\n\n${footer()}`
   });
 }
 
@@ -57,21 +75,22 @@ export async function sendRegistrationReceived({ to, name, electionTitle }) {
   return sendPlain({
     to,
     subject: `Solicitud recibida - ${electionTitle}`,
-    text: `Hola${name ? " " + name : ""},\n\nRecibimos tu solicitud de registro para:\n${electionTitle}\n\nTu solicitud queda pendiente de revisión por el Consejo Directivo. La aprobación no es automática.\n\nCuando sea aprobada, recibirás un enlace único de votación en este correo.\n\n${supportEmail()}`
+    text: `${header()}\nHola${name ? " " + name : ""},\n\nRecibimos tu solicitud de registro.\n\n${block("Campaña", electionTitle)}\n\nTu solicitud queda pendiente de revisión por el Consejo Directivo. La aprobación no es automática.\n\nCuando sea aprobada, recibirás en este correo tu enlace personal de votación.\n\n${safeSenderNote()}\n\n${footer()}`
   });
 }
 
 export async function sendRegistrationApproved({ to, link, electionTitle, voteOpenAt = null, voteCloseAt = null }) {
   const openText = formatLima(voteOpenAt);
   const closeText = formatLima(voteCloseAt);
-  const timing = openText
-    ? `\nInicio de votación: ${openText}${closeText ? `\nCierre de votación: ${closeText}` : ""}\n`
-    : "";
+  const dates = [
+    openText ? `Inicio: ${openText}` : null,
+    closeText ? `Cierre: ${closeText}` : null
+  ].filter(Boolean).join("\n");
 
   return sendPlain({
     to,
-    subject: `Enlace único de votación - ${electionTitle}`,
-    text: `Hola,\n\nTu solicitud fue aprobada para:\n${electionTitle}\n${timing}\nEnlace único de votación:\n${link}\n\nEste enlace es personal y de uso único. Guárdalo y verifica que puedes abrirlo antes de la ventana de votación.\n\n${supportEmail()}`
+    subject: `Solicitud aprobada - ${electionTitle}`,
+    text: `${header()}\nHola,\n\nTu solicitud fue aprobada.\n\n${block("Campaña", electionTitle)}\n\n${dates ? block("Horario de votación", dates) + "\n\n" : ""}Tu enlace personal de votación es:\n${link}\n\nGuarda este correo. El enlace es personal, único y solo puede usarse una vez.\n\nSi abres el enlace antes de la hora de inicio, el sistema te indicará que la votación todavía no empezó.\n\n${safeSenderNote()}\n\n${footer()}`
   });
 }
 
@@ -79,7 +98,7 @@ export async function sendRegistrationRejected({ to, electionTitle, reason }) {
   return sendPlain({
     to,
     subject: `Solicitud revisada - ${electionTitle}`,
-    text: `Hola,\n\nTu solicitud de registro para:\n${electionTitle}\n\nNo fue aprobada por el Consejo Directivo.\n${reason ? "\nMotivo/nota: " + reason + "\n" : ""}\nPara consultas, comunícate con el Consejo Directivo.\n\n${supportEmail()}`
+    text: `${header()}\nHola,\n\nTu solicitud de registro fue revisada y no fue aprobada.\n\n${block("Campaña", electionTitle)}\n\n${reason ? block("Motivo o nota", reason) + "\n\n" : ""}Para consultas, comunícate con el Consejo Directivo.\n\n${footer()}`
   });
 }
 
@@ -93,25 +112,25 @@ export async function sendVoteReceipt({
   verifyUrl,
   chainPosition
 }) {
-  const details = [];
-  if (optionText) details.push(`Opción registrada:\n${optionText}`);
-  if (voteHash) details.push(`Hash del voto:\n${voteHash}`);
-  if (chainPosition) details.push(`Posición en cadena:\n${chainPosition}`);
-  if (receiptCode) details.push(`Código de verificación:\n${receiptCode}`);
-  if (verifyUrl) details.push(`Validar mi voto:\n${verifyUrl}`);
+  const technical = [
+    receiptCode ? block("Código de verificación", receiptCode) : null,
+    verifyUrl ? block("Enlace para validar tu voto", verifyUrl) : null,
+    voteHash ? block("Hash del voto", voteHash) : null,
+    chainPosition ? block("Posición en cadena", String(chainPosition)) : null
+  ].filter(Boolean).join("\n\n");
 
   return sendPlain({
     to,
-    subject: `Voto registrado - ${electionTitle}`,
-    text: `Hola,\n\nTu voto fue registrado correctamente para:\n${electionTitle}\n\nFecha/hora: ${castAt || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}\n\n${details.join("\n\n")}\n\nEste recibo no permite votar nuevamente ni modificar el voto. Solo permite consultar el voto registrado.\n\n${supportEmail()}`
+    subject: `Recibo de voto registrado - ${electionTitle}`,
+    text: `${header()}\nHola,\n\nTu voto fue registrado correctamente.\n\n${block("Campaña", electionTitle)}\n\n${block("Fecha y hora", castAt || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" }))}\n\n${optionText ? block("Opción registrada", optionText) + "\n\n" : ""}Este es tu recibo de verificación.\n\n${technical}\n\nImportante:\nEste recibo no permite votar nuevamente ni modificar tu voto. Solo sirve para consultar el voto registrado en el sistema.\n\nPara validar tu voto, entra al enlace anterior e ingresa tu DNI/CE o correo electrónico.\n\n${footer()}`
   });
 }
 
 export async function sendElectionSealed({ to, electionTitle, resultsUrl, hashesText, resultsText = "" }) {
-  const resultsBlock = resultsText ? `\nResumen de resultados:\n${resultsText}\n` : "";
+  const resultsBlock = resultsText ? block("Resultados", resultsText) + "\n\n" : "";
   return sendPlain({
     to,
     subject: `Resultados sellados - ${electionTitle}`,
-    text: `Hola,\n\nLa campaña fue cerrada y sellada:\n${electionTitle}\n${resultsBlock}\nResultados publicados:\n${resultsUrl}\n\nSellos/hash de integridad:\n${hashesText}\n\nEstos hashes permiten verificar que los resultados no fueron modificados luego del sellado.\n\n${supportEmail()}`
+    text: `${header()}\nHola,\n\nLa campaña fue cerrada y sellada correctamente.\n\n${block("Campaña", electionTitle)}\n\n${resultsBlock}${block("Resultados publicados", resultsUrl)}\n\n${block("Sello de integridad", hashesText)}\n\nEste sello permite verificar que los resultados no fueron modificados luego del cierre.\n\n${footer()}`
   });
 }
