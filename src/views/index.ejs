@@ -13,11 +13,12 @@
 
     <div class="row" style="margin-top:14px">
       <a href="/registro"><button class="ok" ${regOpen ? "" : "disabled"}>Registrarme</button></a>
-      ${voteOpen ? `
-        <button disabled title="Los resultados se publican al cierre de la votación">Resultados disponibles al cierre</button>
-      ` : `
+      ${new Date().getTime() > new Date(election.vote_close_at).getTime() ? `
         <a href="/resultados/${election.id}"><button>Ver resultados</button></a>
+      ` : `
+        <button disabled title="Los resultados se publican cuando cierre la votación">Resultados disponibles al cierre</button>
       `}
+      <a href="/verificar-voto"><button type="button">Validar mi voto</button></a>
     </div>
 
     <div class="admin-link">
