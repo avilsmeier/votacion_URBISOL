@@ -66,6 +66,13 @@
 
     ${admin.role === "admin" ? `
       <hr/>
+      <h3>Administración</h3>
+      <div class="row" style="margin-top:10px">
+        <a href="/admin/users"><button class="ok">Administradores</button></a>
+        <a href="/admin/residentes"><button class="ok">Padrón maestro</button></a>
+      </div>
+
+      <hr/>
       <h3>Campañas</h3>
       <a href="/admin/elections/new"><button class="ok">Crear nueva campaña</button></a>
     ` : ``}
