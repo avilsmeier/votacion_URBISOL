@@ -102,6 +102,21 @@ export async function sendRegistrationRejected({ to, electionTitle, reason }) {
   });
 }
 
+export async function sendVotePendingReminder({ to, electionTitle, voteOpenAt = null, voteCloseAt = null }) {
+  const openText = formatLima(voteOpenAt);
+  const closeText = formatLima(voteCloseAt);
+  const dates = [
+    openText ? `Inicio: ${openText}` : null,
+    closeText ? `Cierre: ${closeText}` : null
+  ].filter(Boolean).join("\n");
+
+  return sendPlain({
+    to,
+    subject: `Recordatorio de votación pendiente - ${electionTitle}`,
+    text: `${header()}\nHola,\n\nTe recordamos que tienes una votación pendiente.\n\n${block("Campaña", electionTitle)}\n\n${dates ? block("Horario de votación", dates) + "\n\n" : ""}Para votar, usa el enlace personal que recibiste cuando tu solicitud fue aprobada.\n\nSi ya votaste hace pocos minutos, puedes ignorar este mensaje.\n\nSi no encuentras tu enlace personal, comunícate con el Consejo Directivo para que sea reemitido.\n\n${safeSenderNote()}\n\n${footer()}`
+  });
+}
+
 export async function sendVoteReceipt({
   to,
   electionTitle,
