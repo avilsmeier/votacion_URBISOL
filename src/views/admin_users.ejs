@@ -17,7 +17,7 @@
         <tr style="border-top:1px solid #eee"><td>${u.email}</td><td>${u.role}</td><td>${u.enabled ? "Activo" : "Desactivado"}</td><td>
           <form method="POST" action="/admin/users/${u.id}/role" style="display:inline"><select name="role"><option value="viewer" ${u.role === "viewer" ? "selected" : ""}>viewer</option><option value="fiscal" ${u.role === "fiscal" ? "selected" : ""}>fiscal</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option></select><button type="submit">Rol</button></form>
           <form method="POST" action="/admin/users/${u.id}/secret" style="display:inline"><input name="secret" type="text" placeholder="Nueva clave" style="width:120px" /><button type="submit">Clave</button></form>
-          ${u.id === admin.id ? `<span class="muted">Actual</span>` : `<form method="POST" action="/admin/users/${u.id}/toggle" style="display:inline"><button type="submit">${u.enabled ? "Desactivar" : "Activar"}</button></form>`}
+          ${u.id === admin.id ? `<span class="muted">Actual</span>` : `<form method="POST" action="/admin/users/${u.id}/toggle" style="display:inline"><button type="submit">${u.enabled ? "Desactivar" : "Activar"}</button></form> <form method="POST" action="/admin/users/${u.id}/delete" style="display:inline" onsubmit="return confirm('¿Eliminar este usuario? Esta acción no se puede deshacer.')"><button type="submit" class="bad">Eliminar</button></form>`}
         </td></tr>
       `).join("")}
     </table>

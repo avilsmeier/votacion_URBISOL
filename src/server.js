@@ -1423,6 +1423,11 @@ app.post("/admin/elections/new", requireAdmin, async (req, res) => {
 
 app.post("/admin/elections/:id/activate", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
+  if (await isElectionSealed(id)) {
+    await audit("ELECTION_ACTIVATE_BLOCKED_SEALED", { actor_admin_id: req.session.admin.id, election_id: id });
+    return res.status(403).send("Esta campaña ya fue sellada y no puede reactivarse. Los resultados permanecen disponibles en el histórico.");
+  }
+  
 
   await q(`UPDATE elections SET is_active=false WHERE is_active=true`);
   await q(`UPDATE elections SET is_active=true WHERE id=$1`, [id]);
@@ -1536,6 +1541,22 @@ app.post("/admin/users/:id/secret", requireAdmin, async (req, res) => {
   res.redirect("/admin/users");
 });
 
+app.post("/admin/users/:id/delete", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).send("Usuario inválido.");
+  if (id === Number(req.session.admin.id)) return res.status(400).send("No puedes eliminar tu propio usuario mientras estás logueado.");
+
+  const target = (await q(`SELECT id, email, role FROM admin_users WHERE id=$1`, [id])).rows[0];
+  if (!target) return res.status(404).send("Usuario no existe.");
+
+  await q(`DELETE FROM admin_users WHERE id=$1`, [id]);
+  await audit("ADMIN_USER_DELETED", {
+    actor_admin_id: req.session.admin.id,
+    meta_json: { deleted_admin_user_id: id, email: target.email, role: target.role }
+  });
+
+  res.redirect("/admin/users");
+});
 app.post("/admin/users/:id/toggle", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (id === req.session.admin.id) return res.status(400).send("No puedes desactivar tu propio usuario.");
