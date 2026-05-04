@@ -11,7 +11,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { q, pool } from "./db.js";
 import { newToken, hashToken } from "./crypto.js";
-import { canMail, sendVoteLink } from "./mailer.js";
+import { canMail, sendVoteLink, sendAdminInvite, sendRegistrationReceived, sendVoteReceipt, sendElectionSealed } from "./mailer.js";
 import { requireAdmin, requireViewerOrAdmin } from "./middleware.js";
 
 import { createAudit } from "./audit.js";
@@ -310,15 +310,58 @@ app.post("/admin/seal", requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/admin/notifications/sealed", requireAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(500).send("No hay campaña activa.");
+
+  const seals = (await q(
+    `SELECT kind, global_hash, total_votes, created_at
+     FROM election_seals
+     WHERE election_id=$1
+     ORDER BY kind ASC`,
+    [election.id]
+  )).rows;
+
+  if (!seals.length) return res.status(400).send("La campaña todavía no tiene sellos. Primero usa Cerrar y Sellar Campaña.");
+
+  const recipients = (await q(
+    `SELECT id, email
+     FROM registrations
+     WHERE election_id=$1 AND status='APPROVED' AND email IS NOT NULL AND email <> ''
+     ORDER BY id ASC`,
+    [election.id]
+  )).rows;
+
+  const hashesText = seals.map(s => `${s.kind}: ${s.global_hash} (votos: ${s.total_votes})`).join("\n");
+  const resultsUrl = absoluteUrl(`/resultados/${election.id}`);
+
+  let sent = 0;
+  let failed = 0;
+  for (const r of recipients) {
+    const ok = await sendEmailNotification({
+      template: "election_sealed",
+      recipient: r.email,
+      election_id: election.id,
+      registration_id: r.id,
+      meta_json: { hashes: seals.map(s => ({ kind: s.kind, global_hash: s.global_hash, total_votes: s.total_votes })) },
+      send: () => sendElectionSealed({ to: r.email, electionTitle: election.title, resultsUrl, hashesText })
+    });
+    if (ok) sent++; else failed++;
+  }
+
+  await audit("SEALED_RESULTS_NOTIFIED", { actor_admin_id: req.session.admin.id, election_id: election.id, meta_json: { sent, failed, total: recipients.length }});
+  res.redirect("/admin");
+});
+
 app.get("/admin/verify", requireViewerOrAdmin, async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
   res.render("verify", { result: null });
 });
 
 app.post("/admin/verify", requireViewerOrAdmin, async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const external = String(req.body?.external_hash || "").trim() || null;
   const c = await pool.connect();
@@ -379,6 +422,50 @@ async function audit(event, meta = {}) {
       meta.meta_json ?? {}
     ]
   );
+}
+
+function baseUrl() {
+  return String(process.env.BASE_URL || "").replace(/\/$/, "");
+}
+
+function absoluteUrl(path) {
+  const b = baseUrl();
+  if (!b) return path;
+  return b + path;
+}
+
+async function logNotification({ election_id = null, registration_id = null, admin_user_id = null, template, recipient, status, error = null, meta_json = {} }) {
+  try {
+    await q(
+      `INSERT INTO notification_log(election_id, registration_id, admin_user_id, channel, template, recipient, status, error, meta_json)
+       VALUES ($1,$2,$3,'EMAIL',$4,$5,$6,$7,$8)`,
+      [election_id, registration_id, admin_user_id, template, recipient, status, error, meta_json]
+    );
+  } catch (e) {
+    console.error("notification_log failed", e);
+  }
+}
+
+async function sendEmailNotification({ template, recipient, election_id = null, registration_id = null, admin_user_id = null, meta_json = {}, send }) {
+  if (!recipient) {
+    await logNotification({ election_id, registration_id, admin_user_id, template, recipient: "", status: "SKIPPED", error: "missing recipient", meta_json });
+    return false;
+  }
+
+  if (!canMail()) {
+    await logNotification({ election_id, registration_id, admin_user_id, template, recipient, status: "SKIPPED", error: "SMTP not configured", meta_json });
+    return false;
+  }
+
+  try {
+    await send();
+    await logNotification({ election_id, registration_id, admin_user_id, template, recipient, status: "SENT", meta_json });
+    return true;
+  } catch (e) {
+    await logNotification({ election_id, registration_id, admin_user_id, template, recipient, status: "FAILED", error: String(e?.message || e), meta_json });
+    console.error("email " + template + " failed", e);
+    return false;
+  }
 }
 
 async function getActiveElection() {
@@ -481,6 +568,46 @@ async function getReferendumForElection(electionId) {
   return { question, options };
 }
 
+function cleanText(v) {
+  const s = String(v || "").trim();
+  return s || null;
+}
+
+async function upsertResidentRegistry({ unit_id, name, dni, phone, email, status = "ACTIVE", notes = null }) {
+  const dniN = cleanText(dni);
+  const phoneN = cleanText(phone);
+  const emailN = cleanText(email)?.toLowerCase() || null;
+  const nameN = String(name || "").trim();
+  if (!unit_id || !nameN) return null;
+
+  const found = (await q(
+    `SELECT id FROM resident_registry
+     WHERE ($1::text IS NOT NULL AND lower(dni)=lower($1))
+        OR ($2::text IS NOT NULL AND lower(email)=lower($2))
+        OR ($3::text IS NOT NULL AND phone=$3)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [dniN, emailN, phoneN]
+  )).rows[0];
+
+  if (found) {
+    return (await q(
+      `UPDATE resident_registry
+       SET unit_id=$1, name=$2, dni=$3, phone=$4, email=$5, status=$6, notes=COALESCE($7, notes), updated_at=now()
+       WHERE id=$8
+       RETURNING id`,
+      [unit_id, nameN, dniN, phoneN, emailN, status, notes, found.id]
+    )).rows[0];
+  }
+
+  return (await q(
+    `INSERT INTO resident_registry(unit_id, name, dni, phone, email, status, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id`,
+    [unit_id, nameN, dniN, phoneN, emailN, status, notes]
+  )).rows[0];
+}
+
 function toDatetimeLocalForInput(dateObj) {
   // Convierte Date -> "YYYY-MM-DDTHH:MM" en hora Lima (forzamos -05)
   const d = new Date(dateObj);
@@ -552,7 +679,7 @@ async function getActiveElectionOrLatest() {
 ========================= */
 app.get("/", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa configurada.");
+  if (!election) return res.render("no_active");
 
   const n = now();
   const regOpen = inWindow(n, election.reg_open_at, election.reg_close_at);
@@ -580,7 +707,7 @@ app.get("/", async (req, res) => {
 ========================= */
 app.get("/registro", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const n = now();
   const regOpen = inWindow(n, election.reg_open_at, election.reg_close_at);
@@ -590,7 +717,7 @@ app.get("/registro", async (req, res) => {
 
 app.post("/registro", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const n = now();
   const regOpen = inWindow(n, election.reg_open_at, election.reg_close_at);
@@ -618,6 +745,27 @@ app.post("/registro", async (req, res) => {
     meta_json: { email: email.trim().toLowerCase(), phone: phone.trim() }
   });
 
+  try {
+    await upsertResidentRegistry({
+      unit_id: unit.id,
+      name: name.trim(),
+      dni: dni.trim(),
+      phone: phone.trim(),
+      email: email.trim().toLowerCase()
+    });
+  } catch (e) {
+    console.error("resident_registry sync failed", e);
+  }
+
+  await sendEmailNotification({
+    template: "registration_received",
+    recipient: email.trim().toLowerCase(),
+    election_id: election.id,
+    registration_id: r.rows[0].id,
+    meta_json: { name: name.trim() },
+    send: () => sendRegistrationReceived({ to: email.trim().toLowerCase(), name: name.trim(), electionTitle: election.title })
+  });
+
   res.render("register_done", { election });
 });
 
@@ -626,7 +774,7 @@ app.post("/registro", async (req, res) => {
 ========================= */
 app.get("/votar/:token", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const tokenHash = hashToken(req.params.token);
   const t = await q(
@@ -687,7 +835,7 @@ app.get("/votar/:token", async (req, res) => {
 
 app.post("/votar/:token", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const n = now();
   const voteOpen = inWindow(n, election.vote_open_at, election.vote_close_at);
@@ -743,7 +891,7 @@ app.post("/votar/:token", async (req, res) => {
 
 app.post("/votar/:token/referendum", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
   if (election.kind !== "VOTACION") return res.status(400).send("Esta campaña no es una votación interna.");
 
   const n = now();
@@ -779,6 +927,15 @@ app.post("/votar/:token/referendum", async (req, res) => {
     await c.query("COMMIT");
 
     await audit("REFERENDUM_VOTE_CAST", { election_id: election.id, unit_id: vt.unit_id, token_id: vt.id, meta_json: { question_id: question.id, option_id }});
+    const regForReceipt = (await q(`SELECT id, email FROM registrations WHERE id=$1`, [vt.registration_id])).rows[0];
+    await sendEmailNotification({
+      template: "vote_receipt",
+      recipient: regForReceipt?.email,
+      election_id: election.id,
+      registration_id: regForReceipt?.id,
+      meta_json: { token_id: vt.id, kind: "REFERENDUM" },
+      send: () => sendVoteReceipt({ to: regForReceipt.email, electionTitle: election.title, castAt: new Date().toLocaleString("es-PE", { timeZone: "America/Lima" }) })
+    });
     return res.render("vote_done", { election });
   } catch (e) {
     await c.query("ROLLBACK");
@@ -795,7 +952,7 @@ app.post("/votar/:token/referendum", async (req, res) => {
 ========================= */
 app.get("/resultados", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
   return res.redirect(`/resultados/${election.id}`);
 });
 
@@ -852,6 +1009,7 @@ app.post("/admin/login", async (req, res) => {
   if (!u.rows.length) return res.render("admin_login", { error: "Credenciales inválidas." });
 
   const user = u.rows[0];
+  if (user.enabled === false) return res.render("admin_login", { error: "Credenciales inválidas." });
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.render("admin_login", { error: "Credenciales inválidas." });
 
@@ -977,11 +1135,163 @@ app.post("/admin/votacion", requireAdmin, async (req, res) => {
 });
 
 /* =========================
+   ADMIN: usuarios y padrón maestro
+========================= */
+app.get("/admin/users", requireAdmin, async (req, res) => {
+  const users = (await q(
+    `SELECT id, email, role, COALESCE(enabled,true) AS enabled, created_at, updated_at
+     FROM admin_users
+     ORDER BY email ASC`
+  )).rows;
+  res.render("admin_users", { admin: req.session.admin, users });
+});
+
+app.post("/admin/users/new", requireAdmin, async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const secret = String(req.body.secret || "");
+  const role = String(req.body.role || "viewer") === "admin" ? "admin" : "viewer";
+  if (!email || !secret) return res.status(400).send("Email y clave son obligatorios.");
+
+  const hash = await bcrypt.hash(secret, 12);
+  const user = (await q(
+    `INSERT INTO admin_users(email, password_hash, role, enabled)
+     VALUES ($1,$2,$3,true)
+     ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash, role=EXCLUDED.role, enabled=true, updated_at=now()
+     RETURNING id`,
+    [email, hash, role]
+  )).rows[0];
+
+  await audit("ADMIN_USER_UPSERTED", { actor_admin_id: req.session.admin.id, meta_json: { target_admin_id: user.id, email, role }});
+  await sendEmailNotification({
+    template: "admin_invite",
+    recipient: email,
+    admin_user_id: user.id,
+    meta_json: { role },
+    send: () => sendAdminInvite({ to: email, role, secret, loginUrl: absoluteUrl("/admin/login") })
+  });
+  res.redirect("/admin/users");
+});
+
+app.post("/admin/users/:id/role", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const role = String(req.body.role || "viewer") === "admin" ? "admin" : "viewer";
+  if (id === req.session.admin.id && role !== "admin") return res.status(400).send("No puedes quitarte tu propio rol admin.");
+
+  await q(`UPDATE admin_users SET role=$1, updated_at=now() WHERE id=$2`, [role, id]);
+  await audit("ADMIN_USER_ROLE_UPDATED", { actor_admin_id: req.session.admin.id, meta_json: { target_admin_id: id, role }});
+  res.redirect("/admin/users");
+});
+
+app.post("/admin/users/:id/secret", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const secret = String(req.body.secret || "");
+  if (!secret) return res.status(400).send("Clave obligatoria.");
+
+  const hash = await bcrypt.hash(secret, 12);
+  await q(`UPDATE admin_users SET password_hash=$1, updated_at=now() WHERE id=$2`, [hash, id]);
+  await audit("ADMIN_USER_SECRET_RESET", { actor_admin_id: req.session.admin.id, meta_json: { target_admin_id: id }});
+  res.redirect("/admin/users");
+});
+
+app.post("/admin/users/:id/toggle", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.session.admin.id) return res.status(400).send("No puedes desactivar tu propio usuario.");
+
+  await q(`UPDATE admin_users SET enabled=NOT COALESCE(enabled,true), updated_at=now() WHERE id=$1`, [id]);
+  await audit("ADMIN_USER_TOGGLED", { actor_admin_id: req.session.admin.id, meta_json: { target_admin_id: id }});
+  res.redirect("/admin/users");
+});
+
+app.get("/admin/residentes", requireAdmin, async (req, res) => {
+  const search = String(req.query.q || "").trim();
+  const params = [];
+  let where = "";
+  if (search) {
+    params.push("%" + search.toLowerCase() + "%");
+    where = `WHERE lower(rr.name) LIKE $1 OR lower(COALESCE(rr.dni,'')) LIKE $1 OR lower(COALESCE(rr.email,'')) LIKE $1 OR lower(COALESCE(rr.phone,'')) LIKE $1 OR lower(u.label) LIKE $1`;
+  }
+
+  const rows = (await q(
+    `SELECT rr.*, u.label AS unit_label
+     FROM resident_registry rr
+     JOIN units u ON u.id=rr.unit_id
+     ${where}
+     ORDER BY u.label ASC, rr.name ASC
+     LIMIT 500`,
+    params
+  )).rows;
+
+  res.render("residents", { admin: req.session.admin, rows, search });
+});
+
+app.get("/admin/residentes/new", requireAdmin, async (req, res) => {
+  res.render("resident_form", { admin: req.session.admin, resident: null, streets: STREETS });
+});
+
+app.post("/admin/residentes/new", requireAdmin, async (req, res) => {
+  const { street, number, unit_extra, name, dni, phone, email, status, notes } = req.body;
+  if (!street || !STREETS.includes(street) || !number || !name) return res.status(400).send("Calle, número y nombre son obligatorios.");
+  const unit = await findOrCreateUnit({ street, number, unit_extra });
+  const row = await upsertResidentRegistry({ unit_id: unit.id, name, dni, phone, email, status: status || "ACTIVE", notes });
+  await audit("RESIDENT_UPSERTED", { actor_admin_id: req.session.admin.id, unit_id: unit.id, meta_json: { resident_id: row?.id }});
+  res.redirect("/admin/residentes");
+});
+
+app.get("/admin/residentes/:id/edit", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const resident = (await q(
+    `SELECT rr.*, u.label AS unit_label, u.street, u.number, u.unit_extra
+     FROM resident_registry rr
+     JOIN units u ON u.id=rr.unit_id
+     WHERE rr.id=$1`,
+    [id]
+  )).rows[0];
+  if (!resident) return res.status(404).send("Residente no existe.");
+  res.render("resident_form", { admin: req.session.admin, resident, streets: STREETS });
+});
+
+app.post("/admin/residentes/:id/edit", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const { street, number, unit_extra, name, dni, phone, email, status, notes } = req.body;
+  if (!street || !STREETS.includes(street) || !number || !name) return res.status(400).send("Calle, número y nombre son obligatorios.");
+  const unit = await findOrCreateUnit({ street, number, unit_extra });
+
+  await q(
+    `UPDATE resident_registry
+     SET unit_id=$1, name=$2, dni=$3, phone=$4, email=$5, status=$6, notes=$7, updated_at=now()
+     WHERE id=$8`,
+    [unit.id, String(name).trim(), cleanText(dni), cleanText(phone), cleanText(email)?.toLowerCase() || null, status || "ACTIVE", cleanText(notes), id]
+  );
+  await audit("RESIDENT_UPDATED", { actor_admin_id: req.session.admin.id, unit_id: unit.id, meta_json: { resident_id: id }});
+  res.redirect("/admin/residentes");
+});
+
+app.post("/admin/residentes/importar-campana", requireAdmin, async (req, res) => {
+  const active = await getActiveElection();
+  if (!active) return res.status(500).send("No hay campaña activa.");
+
+  const rows = (await q(
+    `INSERT INTO registrations(election_id, unit_id, name, dni, phone, email, status)
+     SELECT $1, rr.unit_id, rr.name, COALESCE(rr.dni,''), COALESCE(rr.phone,''), COALESCE(rr.email,''), 'PENDING'
+     FROM resident_registry rr
+     WHERE rr.status='ACTIVE'
+       AND NOT EXISTS (
+         SELECT 1 FROM registrations r WHERE r.election_id=$1 AND r.unit_id=rr.unit_id
+       )
+     RETURNING id, unit_id`,
+    [active.id]
+  )).rows;
+
+  await audit("RESIDENT_REGISTRY_IMPORTED", { actor_admin_id: req.session.admin.id, election_id: active.id, meta_json: { imported: rows.length }});
+  res.redirect("/admin/solicitudes?filter=pending");
+});
+
+/* =========================
    ADMIN: Solicitudes + aprobación (email por defecto)
 ========================= */
 app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const filter = String(req.query.filter || "pending").toLowerCase();
   let where = "";
@@ -1006,7 +1316,7 @@ app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
 
 app.get("/admin/solicitudes/:id", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const id = Number(req.params.id);
   const r = (await q(
@@ -1037,7 +1347,7 @@ app.get("/admin/solicitudes/:id", requireViewerOrAdmin, async (req, res) => {
 
 app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const id = Number(req.params.id);
 
@@ -1106,7 +1416,7 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
 
 app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const id = Number(req.params.id);
 
@@ -1139,7 +1449,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   });
 
   try {
-    const sent = await sendVoteLink({ to: reg.email, link });
+    const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title });
     await audit("TOKEN_EMAIL_SENT", {
       actor_admin_id: req.session.admin.id,
       election_id: active.id,
@@ -1164,7 +1474,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
 
 app.post("/admin/solicitudes/:id/rechazar", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const id = Number(req.params.id);
   const notes = String(req.body.notes || "").trim() || null;
@@ -1195,7 +1505,7 @@ app.post("/admin/solicitudes/:id/rechazar", requireAdmin, async (req, res) => {
 ========================= */
 app.get("/admin/resultados", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   let totals;
   let votesSql = `SELECT COUNT(*)::int AS n FROM votes WHERE election_id=$1`;
@@ -1344,7 +1654,7 @@ app.get("/admin/print/padron", requireViewerOrAdmin, async (req, res) => {
 ========================= */
 app.get("/admin/acta.pdf", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const totals = (await q(
     `SELECT c.name, COUNT(v.id)::int AS votes
@@ -1464,7 +1774,7 @@ app.get("/admin/acta.pdf", requireViewerOrAdmin, async (req, res) => {
 
 app.get("/admin/padron_v2.pdf", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.status(500).send("No hay elección activa.");
+  if (!active) return res.render("no_active");
 
   const rows = (await q(
     `SELECT u.label AS unidad, r.name AS representante
@@ -1836,7 +2146,7 @@ app.post("/admin/fiscales/:id/delete", requireAdmin, async (req, res) => {
 
 app.post("/votar/:token/fiscales", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.status(500).send("No hay elección activa.");
+  if (!election) return res.render("no_active");
 
   const n = now();
   const voteOpen = inWindow(n, election.vote_open_at, election.vote_close_at);
