@@ -16,6 +16,12 @@ function patch(label, fn) {
   }
 }
 
+// Hotfix por si una corrida previa dejo el regex sin escapes.
+patch("fix malformed close regex", txt => txt.replace(
+  '/^/admin/elections/d+/close$/.test(req.path)',
+  'new RegExp("^/admin/elections/\\\\d+/close$").test(req.path)'
+));
+
 // 1) Importar handler modular de acta.
 patch("import actaPdf modular", txt => {
   if (txt.includes('import { createActaPdfHandler } from "./actaPdf.js";')) return txt;
@@ -43,7 +49,7 @@ app.use(async (req, res, next) => {
     req.path === "/admin/logout" ||
     req.path === "/admin/verify" ||
     req.path === "/admin/notifications/sealed" ||
-    /^\/admin\/elections\/\d+\/close$/.test(req.path);
+    new RegExp("^/admin/elections/\\\\d+/close$").test(req.path);
 
   if (allow) return next();
 
