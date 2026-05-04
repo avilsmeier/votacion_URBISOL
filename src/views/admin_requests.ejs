@@ -16,8 +16,20 @@
       Tip: normalmente el comité trabaja solo con “Pendientes”.
     </p>
 
+    ${filter === "pending" && admin.role === "admin" ? `
+      <form method="POST" action="/admin/solicitudes/bulk-approve" onsubmit="return confirm('Se aprobarán las solicitudes seleccionadas y se enviarán los enlaces por email. ¿Continuar?')">
+        <button class="ok" type="submit" style="margin:12px 0">Aprobar seleccionadas y enviar email</button>
+    ` : ``}
+
+    ${new URLSearchParams(globalThis.location?.search || "").get("bulk") ? `
+      <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin:10px 0">
+        Resultado bulk: ${new URLSearchParams(globalThis.location?.search || "").get("approved") || 0} aprobada(s), ${new URLSearchParams(globalThis.location?.search || "").get("sent") || 0} email(s) enviados, ${new URLSearchParams(globalThis.location?.search || "").get("failed") || 0} fallido(s), ${new URLSearchParams(globalThis.location?.search || "").get("skipped") || 0} omitida(s).
+      </div>
+    ` : ``}
+
     <table style="width:100%; border-collapse:collapse">
       <tr>
+        ${filter === "pending" && admin.role === "admin" ? `<th align="left">Sel.</th>` : ``}
         <th align="left">Fecha</th>
         <th align="left">Unidad</th>
         <th align="left">Nombre</th>
@@ -25,6 +37,7 @@
       </tr>
       ${rows.map(r => `
         <tr style="border-top:1px solid #eee">
+          ${filter === "pending" && admin.role === "admin" ? `<td><input type="checkbox" name="registration_ids" value="${r.id}" style="width:auto" checked /></td>` : ``}
           <td>${new Date(r.created_at).toLocaleString("es-PE")}</td>
           <td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>
           <td>${r.name}</td>
@@ -32,5 +45,6 @@
         </tr>
       `).join("")}
     </table>
+    ${filter === "pending" && admin.role === "admin" ? `</form>` : ``}
   </div>
 ` }) %>

@@ -1768,6 +1768,69 @@ app.post("/admin/residentes/importar-campana", requireAdmin, async (req, res) =>
 /* =========================
    ADMIN: Solicitudes + aprobación (email por defecto)
 ========================= */
+app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
+  const active = await getActiveElection();
+  if (!active) return res.status(500).send("No hay campaña activa.");
+  if (await isElectionSealed(active.id)) return res.status(403).send("La campaña ya fue sellada. No se pueden aprobar solicitudes.");
+
+  const idsRaw = Array.isArray(req.body.registration_ids) ? req.body.registration_ids : [req.body.registration_ids];
+  const ids = idsRaw.map(x => Number(x)).filter(Boolean);
+  if (!ids.length) return res.redirect("/admin/solicitudes?filter=pending");
+
+  let approved = 0;
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const id of ids) {
+    const reg = (await q(
+      `SELECT r.*, u.id AS unit_id, u.label AS unit_label
+       FROM registrations r
+       JOIN units u ON u.id=r.unit_id
+       WHERE r.id=$1 AND r.election_id=$2`,
+      [id, active.id]
+    )).rows[0];
+
+    if (!reg || reg.status !== "PENDING" || !reg.email) { skipped++; continue; }
+
+    const raw = newToken();
+    const tokenHash = hashToken(raw);
+    let tokenId;
+
+    await withTx(pool, async (client) => {
+      await client.query(
+        `UPDATE registrations
+         SET status='APPROVED', reviewed_at=NOW(), reviewed_by=$1, notes=COALESCE(notes,'')
+         WHERE id=$2 AND status='PENDING'`,
+        [req.session.admin.id, reg.id]
+      );
+      const tr = await client.query(
+        `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, created_by_admin_id, issued_via)
+         VALUES ($1,$2,$3,$4,'ACTIVE',$5,'EMAIL')
+         RETURNING id`,
+        [active.id, reg.id, reg.unit_id, tokenHash, req.session.admin.id]
+      );
+      tokenId = tr.rows[0].id;
+    });
+
+    approved++;
+    const link = absoluteUrl(`/votar/${raw}`);
+    const ok = await sendEmailNotification({
+      template: "registration_approved",
+      recipient: reg.email,
+      election_id: active.id,
+      registration_id: reg.id,
+      meta_json: { token_id: tokenId, bulk: true },
+      send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at })
+    });
+    if (ok) sent++; else failed++;
+
+    await audit("REGISTRATION_APPROVED", { actor_admin_id: req.session.admin.id, election_id: active.id, registration_id: reg.id, unit_id: reg.unit_id, token_id: tokenId, meta_json: { via: "EMAIL", bulk: true, sent: ok } });
+  }
+
+  await audit("REGISTRATION_BULK_APPROVED", { actor_admin_id: req.session.admin.id, election_id: active.id, meta_json: { requested: ids.length, approved, sent, failed, skipped } });
+  res.redirect(`/admin/solicitudes?filter=pending&bulk=1&approved=${approved}&sent=${sent}&failed=${failed}&skipped=${skipped}`);
+});
 app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
   if (!active) return res.render("no_active");
