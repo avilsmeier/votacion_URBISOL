@@ -1,0 +1,36 @@
+<%- include('layout', { title: "Validar mi voto", body: `
+  <div class="card">
+    <h2>Validar mi voto</h2>
+    <p class="muted">Ingresa el código de verificación recibido por correo y tu DNI/CE o correo electrónico.</p>
+
+    <form method="POST" action="/verificar-voto">
+      <label>Código de verificación</label>
+      <input name="receipt" value="${receipt || ""}" required />
+
+      <label>DNI/CE o correo</label>
+      <input name="identity" value="${identity || ""}" required />
+
+      <button class="ok" type="submit">Validar voto</button>
+    </form>
+
+    ${error ? `<p class="bad" style="padding:10px; border-radius:10px; margin-top:12px">${error}</p>` : ``}
+
+    ${result ? `
+      <hr/>
+      <h3>Voto encontrado</h3>
+      <p><b>Campaña:</b> ${result.election_title}</p>
+      <p><b>Unidad:</b> ${result.unit_label}</p>
+      <p><b>Representante:</b> ${result.name}</p>
+      <p><b>Fecha/hora:</b> ${new Date(result.cast_at).toLocaleString("es-PE")}</p>
+      <p><b>Opción registrada:</b> ${result.option_label ? result.option_label + ". " : ""}${result.option_text}</p>
+      <p><b>Posición en cadena:</b> ${result.chain_position}</p>
+      <p><b>Hash del voto:</b></p>
+      <textarea readonly style="font-family:monospace; min-height:70px">${result.vote_hash}</textarea>
+      <p class="muted">Este recibo solo permite consultar el voto registrado. No permite votar nuevamente ni modificar el voto.</p>
+    ` : ``}
+
+    <div style="margin-top:14px">
+      <a href="/"><button type="button">Volver</button></a>
+    </div>
+  </div>
+` }) %>
