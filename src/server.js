@@ -880,6 +880,29 @@ app.post("/registro", async (req, res) => {
 /* =========================
    VOTAR (ventana + token 1 uso)
 ========================= */
+// SAFE_VOTE_GET_WINDOW_GUARD
+app.get("/votar/:token", async (req, res, next) => {
+  const election = await getActiveElection();
+  if (!election) return res.render("no_active");
+
+  const tokenHash = hashToken(req.params.token);
+  const t = (await q(
+    `SELECT id, status FROM vote_tokens WHERE token_hash=$1 AND election_id=$2 LIMIT 1`,
+    [tokenHash, election.id]
+  )).rows[0];
+
+  if (!t) return res.status(404).send("Enlace inválido.");
+  if (t.status !== "ACTIVE") return res.render("vote_used", { election });
+
+  const n = now();
+  if (n < new Date(election.vote_open_at)) {
+    return res.render("closed", { election, state: "pending" });
+  }
+  if (n > new Date(election.vote_close_at)) {
+    return res.render("closed", { election, state: "closed" });
+  }
+  return next();
+});
 app.get("/votar/:token", async (req, res) => {
   const election = await getActiveElection();
   if (!election) return res.render("no_active");
@@ -1972,7 +1995,7 @@ app.get("/admin/padron_v2.pdf", requireViewerOrAdmin, async (req, res) => {
   doc.text(`Generado: ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}`);
   doc.moveDown(0.8);
 
-  doc.fontSize(11).text("Criterio: Habilitados = registros APROBADOS por el Comité Electoral.");
+  doc.fontSize(11).text("Criterio: Habilitados = registros APROBADOS por el Consejo Directivo.");
   doc.moveDown(1);
 
   // -------- Tabla --------
@@ -2056,12 +2079,12 @@ app.get("/admin/padron_v2.pdf", requireViewerOrAdmin, async (req, res) => {
   }
 
   // Fila 1
-  signLine(x1, sy, "Presidente(a) Comité Electoral");
-  signLine(x2, sy, "Miembro Comité Electoral");
+  signLine(x1, sy, "Presidente(a) Consejo Directivo");
+  signLine(x2, sy, "Miembro Consejo Directivo");
 
   // Fila 2
   sy += 46;
-  signLine(x1, sy, "Miembro Comité Electoral");
+  signLine(x1, sy, "Miembro Consejo Directivo");
   signLine(x2, sy, "Fiscal");
 
   // Fila 3
