@@ -29,20 +29,6 @@ function formatLima(dt) {
   return new Date(dt).toLocaleString("es-PE", { timeZone: "America/Lima" });
 }
 
-function googleCalendarUrl({ title, start, end, details }) {
-  if (!start) return null;
-  const s = new Date(start);
-  const e = end ? new Date(end) : new Date(s.getTime() + 60 * 60 * 1000);
-  const fmt = d => d.toISOString().replace(/[-:]|\.\d{3}/g, "");
-  const p = new URLSearchParams({
-    action: "TEMPLATE",
-    text: title || "Votación Isla del Sol",
-    dates: `${fmt(s)}/${fmt(e)}`,
-    details: details || "Inicio de votación digital."
-  });
-  return `https://calendar.google.com/calendar/render?${p.toString()}`;
-}
-
 async function sendPlain({ to, subject, text }) {
   if (!canMail()) return false;
   const transport = makeTransport();
@@ -78,15 +64,8 @@ export async function sendRegistrationReceived({ to, name, electionTitle }) {
 export async function sendRegistrationApproved({ to, link, electionTitle, voteOpenAt = null, voteCloseAt = null }) {
   const openText = formatLima(voteOpenAt);
   const closeText = formatLima(voteCloseAt);
-  const calUrl = googleCalendarUrl({
-    title: `Votación: ${electionTitle}`,
-    start: voteOpenAt,
-    end: voteCloseAt,
-    details: `Inicio de votación digital para ${electionTitle}. Enlace único: ${link}`
-  });
-
   const timing = openText
-    ? `\nInicio de votación: ${openText}${closeText ? `\nCierre de votación: ${closeText}` : ""}\n${calUrl ? `\nAgregar a Google Calendar:\n${calUrl}\n` : ""}`
+    ? `\nInicio de votación: ${openText}${closeText ? `\nCierre de votación: ${closeText}` : ""}\n`
     : "";
 
   return sendPlain({
