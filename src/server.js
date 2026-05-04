@@ -997,6 +997,109 @@ app.post("/votar/:token", async (req, res) => {
   }
 });
 
+// FORCED_REFERENDUM_RECEIPT_ROUTE
+app.post("/votar/:token/referendum", async (req, res, next) => {
+  const election = await getActiveElection();
+  if (!election) return res.render("no_active");
+  if (election.kind !== "VOTACION") return next();
+
+  const n = now();
+  const voteOpen = inWindow(n, election.vote_open_at, election.vote_close_at);
+  if (!voteOpen) return res.render("closed", { election });
+
+  const option_id = Number(req.body.option_id);
+  if (!option_id) return res.status(400).send("Elige una opción.");
+
+  const { question, options } = await getReferendumForElection(election.id);
+  const selectedOption = options.find(o => Number(o.id) === option_id);
+  if (!question || !selectedOption) return res.status(400).send("Opción inválida.");
+
+  const tokenHash = hashToken(req.params.token);
+  const c = await pool.connect();
+  let vote;
+  let vt;
+  let receiptCode;
+
+  try {
+    await c.query("BEGIN");
+
+    const t = await c.query(
+      `SELECT * FROM vote_tokens WHERE token_hash=$1 AND election_id=$2 FOR UPDATE`,
+      [tokenHash, election.id]
+    );
+
+    if (!t.rows.length) {
+      await c.query("ROLLBACK");
+      return res.status(404).send("Enlace inválido.");
+    }
+
+    vt = t.rows[0];
+    if (vt.status !== "ACTIVE") {
+      await c.query("ROLLBACK");
+      return res.render("vote_used", { election });
+    }
+
+    vote = await insertReferendumVoteChained(c, {
+      election_id: election.id,
+      unit_id: vt.unit_id,
+      question_id: question.id,
+      option_id,
+      token_id: vt.id,
+      ip: getReqIp(req),
+      user_agent: getUserAgent(req)
+    });
+
+    receiptCode = await createVoteReceipt(c, {
+      election_id: election.id,
+      registration_id: vt.registration_id,
+      unit_id: vt.unit_id,
+      vote_kind: "REFERENDUM",
+      vote_table: "referendum_votes",
+      vote_id: vote.id,
+      vote_hash: vote.vote_hash
+    });
+
+    await c.query(`UPDATE vote_tokens SET status='USED', used_at=NOW() WHERE id=$1`, [vt.id]);
+    await c.query("COMMIT");
+
+    await audit("REFERENDUM_VOTE_CAST", {
+      election_id: election.id,
+      unit_id: vt.unit_id,
+      token_id: vt.id,
+      meta_json: { question_id: question.id, option_id, vote_hash: vote.vote_hash, chain_position: vote.chain_position }
+    });
+
+    const regForReceipt = (await q(`SELECT id, email FROM registrations WHERE id=$1`, [vt.registration_id])).rows[0];
+    const optionText = `${selectedOption.option_label ? selectedOption.option_label + ". " : ""}${selectedOption.option_text}`;
+
+    await sendEmailNotification({
+      template: "vote_receipt",
+      recipient: regForReceipt?.email,
+      election_id: election.id,
+      registration_id: regForReceipt?.id,
+      meta_json: { token_id: vt.id, kind: "REFERENDUM", vote_hash: vote.vote_hash, chain_position: vote.chain_position },
+      send: () => sendVoteReceipt({
+        to: regForReceipt.email,
+        electionTitle: election.title,
+        castAt: new Date(vote.cast_at).toLocaleString("es-PE", { timeZone: "America/Lima" }),
+        optionText,
+        voteHash: vote.vote_hash,
+        chainPosition: vote.chain_position,
+        receiptCode,
+        verifyUrl: absoluteUrl(`/verificar-voto?receipt=${encodeURIComponent(receiptCode)}`)
+      })
+    });
+
+    return res.render("vote_done", { election });
+  } catch (e) {
+    await c.query("ROLLBACK");
+    if (String(e?.code) === "23505") return res.render("vote_used", { election });
+    console.error(e);
+    return res.status(500).send("Error registrando voto.");
+  } finally {
+    c.release();
+  }
+});
 app.post("/votar/:token/referendum", async (req, res) => {
   const election = await getActiveElection();
   if (!election) return res.render("no_active");
