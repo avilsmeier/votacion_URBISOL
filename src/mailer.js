@@ -21,7 +21,7 @@ function systemName() {
 }
 
 function supportEmail() {
-  return process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || "Comité Electoral";
+  return process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || "Consejo Directivo";
 }
 
 async function sendPlain({ to, subject, text }) {
@@ -52,7 +52,7 @@ export async function sendRegistrationReceived({ to, name, electionTitle }) {
   return sendPlain({
     to,
     subject: `Solicitud recibida - ${electionTitle}`,
-    text: `Hola${name ? " " + name : ""},\n\nRecibimos tu solicitud de registro para:\n${electionTitle}\n\nTu solicitud queda pendiente de revisión por el comité. La aprobación no es automática.\n\nCuando sea aprobada, recibirás un enlace único de votación en este correo.\n\n${supportEmail()}`
+    text: `Hola${name ? " " + name : ""},\n\nRecibimos tu solicitud de registro para:\n${electionTitle}\n\nTu solicitud queda pendiente de revisión por el Consejo Directivo. La aprobación no es automática.\n\nCuando sea aprobada, recibirás un enlace único de votación en este correo.\n\n${supportEmail()}`
   });
 }
 
@@ -68,15 +68,31 @@ export async function sendRegistrationRejected({ to, electionTitle, reason }) {
   return sendPlain({
     to,
     subject: `Solicitud revisada - ${electionTitle}`,
-    text: `Hola,\n\nTu solicitud de registro para:\n${electionTitle}\n\nNo fue aprobada por el comité.\n${reason ? "\nMotivo/nota: " + reason + "\n" : ""}\nPara consultas, comunícate con el comité.\n\n${supportEmail()}`
+    text: `Hola,\n\nTu solicitud de registro para:\n${electionTitle}\n\nNo fue aprobada por el Consejo Directivo.\n${reason ? "\nMotivo/nota: " + reason + "\n" : ""}\nPara consultas, comunícate con el Consejo Directivo.\n\n${supportEmail()}`
   });
 }
 
-export async function sendVoteReceipt({ to, electionTitle, castAt }) {
+export async function sendVoteReceipt({
+  to,
+  electionTitle,
+  castAt,
+  optionText,
+  voteHash,
+  receiptCode,
+  verifyUrl,
+  chainPosition
+}) {
+  const details = [];
+  if (optionText) details.push(`Opción registrada:\n${optionText}`);
+  if (voteHash) details.push(`Hash del voto:\n${voteHash}`);
+  if (chainPosition) details.push(`Posición en cadena:\n${chainPosition}`);
+  if (receiptCode) details.push(`Código de verificación:\n${receiptCode}`);
+  if (verifyUrl) details.push(`Validar mi voto:\n${verifyUrl}`);
+
   return sendPlain({
     to,
     subject: `Voto registrado - ${electionTitle}`,
-    text: `Hola,\n\nTu voto fue registrado correctamente para:\n${electionTitle}\n\nFecha/hora: ${castAt || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}\n\nEste mensaje confirma la recepción del voto. No incluye ni revela la opción elegida.\n\n${supportEmail()}`
+    text: `Hola,\n\nTu voto fue registrado correctamente para:\n${electionTitle}\n\nFecha/hora: ${castAt || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}\n\n${details.join("\n\n")}\n\nEste recibo no permite votar nuevamente ni modificar el voto. Solo permite consultar el voto registrado.\n\n${supportEmail()}`
   });
 }
 
