@@ -1,0 +1,46 @@
+<%- include('layout', { title: "Recordatorios de voto", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Recordatorios de voto pendiente</h2>
+      <a href="/admin">Volver</a>
+    </div>
+
+    <p><b>${election.title}</b></p>
+    <p class="muted">Este recordatorio no incluye enlace de votación. Solo avisa al vecino que todavía no votó.</p>
+
+    <div class="row" style="margin-top:12px">
+      <div class="card" style="box-shadow:none"><b>Aprobados</b><br/>${stats.approved}</div>
+      <div class="card" style="box-shadow:none"><b>Ya votaron</b><br/>${stats.voted}</div>
+      <div class="card" style="box-shadow:none"><b>Pendientes</b><br/>${rows.length}</div>
+    </div>
+
+    ${lastResult ? `
+      <div style="padding:10px; border:1px solid #eee; border-radius:10px; margin-top:12px">
+        <b>Último envío:</b> ${lastResult.sent} enviado(s), ${lastResult.failed} fallido(s), ${lastResult.total} total.
+      </div>
+    ` : ``}
+
+    <form method="POST" action="/admin/recordatorios-voto" style="margin-top:14px" onsubmit="return confirm('Se enviará un recordatorio simple a ${rows.length} vecino(s) pendiente(s). ¿Continuar?')">
+      <button class="ok" type="submit" ${rows.length ? "" : "disabled"}>Enviar recordatorio a pendientes</button>
+    </form>
+
+    <hr/>
+    <h3>Pendientes de voto</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:13px">
+      <tr><th align="left">Unidad</th><th align="left">Nombre</th><th align="left">DNI/CE</th><th align="left">Email</th><th align="left">Acciones</th></tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${r.unit_label || ""}</td>
+          <td>${r.name || ""}</td>
+          <td>${r.dni || ""}</td>
+          <td>${r.email || ""}</td>
+          <td>
+            <form method="POST" action="/admin/solicitudes/${r.registration_id}/reemitir" style="display:inline" onsubmit="return confirm('Se invalidará el enlace anterior y se enviará uno nuevo. ¿Continuar?')">
+              <button type="submit">Reemitir enlace</button>
+            </form>
+          </td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
