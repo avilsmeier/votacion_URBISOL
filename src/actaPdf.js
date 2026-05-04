@@ -134,16 +134,15 @@ export function createActaPdfHandler({ q, PDFDocument, getActiveElection, getRef
       doc.fontSize(9).text(label, x, y + 14, { width: colW });
     }
 
-    signLine(x1, sy, "Presidente(a) Consejo Directivo");
-    signLine(x2, sy, "Miembro Consejo Directivo");
+    const signatureLabels = active.kind === "VOTACION"
+      ? ["Presidente", "Vicepresidente", "Secretario", "Tesorero (opcional)", "Fiscal"]
+      : ["Presidente", "Vicepresidente", "Secretario", "Fiscal", "Personero(a) 1", "Personero(a) 2"];
 
-    sy += 46;
-    signLine(x1, sy, "Miembro Consejo Directivo");
-    signLine(x2, sy, "Fiscal");
-
-    sy += 46;
-    signLine(x1, sy, "Personero(a) 1");
-    signLine(x2, sy, "Personero(a) 2");
+    for (let i = 0; i < signatureLabels.length; i += 2) {
+      signLine(x1, sy, signatureLabels[i]);
+      if (signatureLabels[i + 1]) signLine(x2, sy, signatureLabels[i + 1]);
+      sy += 46;
+    }
 
     doc.fontSize(8)
       .fillColor("gray")
