@@ -12,18 +12,21 @@
     <p><b>Email:</b> ${r.email || "-"}</p>
     <p><b>Estado:</b> ${r.status}</p>
 
-    ${new URLSearchParams(globalThis.location?.search || "").get("link") ? "" : ""}
+    ${typeof link !== "undefined" && link ? `
+      <div style="padding:12px; border:1px solid #eee; border-radius:10px; margin:14px 0">
+        <h3 style="margin-top:0">Enlace generado</h3>
+        <p class="muted">El sistema intentó enviar este enlace por correo al vecino. También puedes copiarlo manualmente si fuera necesario.</p>
+        <textarea readonly style="font-family:monospace; min-height:70px">${link}</textarea>
+        <p class="muted">Email: ${typeof sent !== "undefined" && sent ? "enviado ✅" : "no enviado o falló ⚠️"}</p>
+      </div>
+    ` : ``}
 
     ${r.status === "PENDING" && admin.role === "admin" ? `
       <hr/>
       <h3>Aprobar</h3>
+      <p class="muted">Al aprobar se genera un enlace personal, se envía por email y también se muestra en pantalla para respaldo manual.</p>
       <form method="POST" action="/admin/solicitudes/${r.id}/aprobar">
-        <label>Canal</label>
-        <select name="via">
-          <option value="COPY">Copiar enlace (para enviar manual)</option>
-          <option value="EMAIL">Enviar por email (si está configurado)</option>
-        </select>
-        <button class="ok" type="submit">Aprobar y generar enlace</button>
+        <button class="ok" type="submit">Aprobar y enviar enlace</button>
       </form>
 
       <hr/>
@@ -37,13 +40,16 @@
 
     <hr/>
     <h3>Token</h3>
-    <p class="muted">Si aprobaste, el enlace se muestra en la URL con ?link=...</p>
-    <p class="muted">Tip: después de aprobar, copia el link desde la barra del navegador (parámetro link) y envíalo al vecino.</p>
-
     ${tokenRow ? `
       <p><b>Estado token:</b> ${tokenRow.status}</p>
-      <p><b>Emitido:</b> ${new Date(tokenRow.issued_at).toLocaleString()}</p>
-      <p><b>Usado:</b> ${tokenRow.used_at ? new Date(tokenRow.used_at).toLocaleString() : "-"}</p>
+      <p><b>Emitido:</b> ${new Date(tokenRow.issued_at).toLocaleString("es-PE")}</p>
+      <p><b>Usado:</b> ${tokenRow.used_at ? new Date(tokenRow.used_at).toLocaleString("es-PE") : "-"}</p>
     ` : `<p class="muted">Aún no se generó token.</p>`}
+
+    ${r.status === "APPROVED" && tokenRow && tokenRow.status !== "USED" && admin.role === "admin" ? `
+      <form method="POST" action="/admin/solicitudes/${r.id}/reemitir" style="margin-top:12px" onsubmit="return confirm('Se invalidará el enlace anterior y se enviará uno nuevo. ¿Continuar?')">
+        <button type="submit">Reemitir enlace</button>
+      </form>
+    ` : ``}
   </div>
 ` }) %>
