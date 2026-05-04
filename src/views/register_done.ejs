@@ -1,6 +1,24 @@
 <%- include('layout', { title: "Registro enviado", body: `
   <div class="card">
     <h2>Solicitud enviada ✅</h2>
-    <p>El Comité Electoral revisará tu registro. Si es aprobado, te enviaremos un enlace único de votación.</p>
+
+    <p>Recibimos tu solicitud de registro.</p>
+
+    <p class="muted">
+      El Consejo Directivo revisará la información. Si tu solicitud es aprobada, recibirás un enlace personal de votación por correo electrónico.
+    </p>
+
+    <div style="padding:12px; border:1px solid #eee; border-radius:10px; margin:14px 0">
+      <h3 style="margin-top:0">Revisa tu correo</h3>
+      <p>Te enviamos una confirmación al correo registrado.</p>
+      <p class="muted">
+        Si no lo encuentras en unos minutos, revisa también la bandeja de Spam, Correo no deseado o Promociones.
+      </p>
+      <p class="muted">
+        Para recibir futuras notificaciones sin problemas, agrega el correo del sistema a tus contactos o remitentes seguros.
+      </p>
+    </div>
+
+    <a href="/"><button>Volver</button></a>
   </div>
 ` }) %>
