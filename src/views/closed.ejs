@@ -1,6 +1,43 @@
-<%- include('layout', { title: "Votación cerrada", body: `
+<%- include('layout', { title: state === "pending" ? "Votación pendiente" : "Votación cerrada", body: `
   <div class="card">
-    <h2>Votación cerrada</h2>
-    <p class="muted">La votación digital no está disponible en este momento.</p>
+    ${state === "pending" ? `
+      <h2>Tu enlace es válido ✅</h2>
+      <p>La votación todavía no empezó.</p>
+      <p class="muted">Podrás votar a partir de:</p>
+      <h3>${new Date(election.vote_open_at).toLocaleString("es-PE")}</h3>
+      <p class="muted">Cierre programado: ${new Date(election.vote_close_at).toLocaleString("es-PE")}</p>
+
+      <div style="padding:12px; border:1px solid #eee; border-radius:10px; margin:14px 0">
+        <div class="muted">Tiempo restante aproximado</div>
+        <div id="countdown" style="font-size:22px; font-weight:800; margin-top:6px">Calculando...</div>
+      </div>
+
+      <script>
+        const target = new Date(${JSON.stringify(election.vote_open_at)}).getTime();
+        const el = document.getElementById("countdown");
+        function tick() {
+          const diff = target - Date.now();
+          if (diff <= 0) {
+            el.textContent = "La votación ya debería estar abierta. Recarga esta página.";
+            return;
+          }
+          const d = Math.floor(diff / 86400000);
+          const h = Math.floor((diff % 86400000) / 3600000);
+          const m = Math.floor((diff % 3600000) / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          el.textContent = (d ? d + "d " : "") + String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+        }
+        tick();
+        setInterval(tick, 1000);
+      </script>
+    ` : `
+      <h2>Votación cerrada</h2>
+      <p class="muted">La votación digital no está disponible en este momento.</p>
+      ${election ? `<p><b>${election.title}</b></p><p class="muted">La ventana de votación cerró el ${new Date(election.vote_close_at).toLocaleString("es-PE")}.</p>` : ``}
+    `}
+
+    <div style="margin-top:14px">
+      <a href="/"><button type="button">Volver</button></a>
+    </div>
   </div>
 ` }) %>
