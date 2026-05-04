@@ -1,5 +1,16 @@
 -- Admin UI + padron maestro de residentes
--- Ejecutar una vez en la MISMA base que usa la app:
+-- Ejecutar una vez en la MISMA base que usa la app.
+--
+-- IMPORTANTE: esta migracion altera tablas existentes. Debe ejecutarse como
+-- owner de las tablas o como superusuario PostgreSQL. Si DATABASE_URL usa un
+-- usuario de app sin permisos de ownership, correra SELECT/INSERT pero fallara
+-- con "must be owner of table admin_users".
+--
+-- Comando recomendado en VPS, ajustando la DB si no se llama votacion:
+--   sudo -u postgres psql -d votacion -v ON_ERROR_STOP=1 -f /home/autoagent/votaciones/migrations/20260504_admins_and_resident_registry.sql
+--
+-- Alternativa si el owner correcto debe ser autoagent:
+--   sudo -u postgres psql -d votacion -c "ALTER TABLE admin_users OWNER TO autoagent; ALTER TABLE units OWNER TO autoagent;"
 --   set -a; source .env; set +a; psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/20260504_admins_and_resident_registry.sql
 --
 -- Esta migracion asume que el esquema base ya existe. Si falla diciendo que no
