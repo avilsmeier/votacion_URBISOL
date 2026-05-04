@@ -2,7 +2,7 @@
   <div class="card">
     <div class="topbar">
       <div>
-        <h2>Panel Comité Electoral</h2>
+        <h2>Panel Consejo Directivo</h2>
         <div class="muted">${admin.email} · <span class="pill">${admin.role}</span></div>
       </div>
       <form method="POST" action="/admin/logout">
@@ -37,6 +37,7 @@
 
       <div class="row" style="margin-top:12px">
         <a href="/admin/election/edit"><button class="ok">Editar Campaña</button></a>
+        <a href="/admin/fiscalizacion"><button class="ok">Fiscalización</button></a>
       </div>
 
       <div class="row" style="margin-top:10px">
@@ -65,6 +66,9 @@
 
     ` : `
       <p>No hay campaña activa.</p>
+      <div class="row" style="margin-top:12px">
+        <a href="/admin/fiscalizacion"><button class="ok">Fiscalización</button></a>
+      </div>
     `}
 
     ${admin.role === "admin" ? `
@@ -91,7 +95,7 @@
           <td>${e.kind === "VOTACION" ? "Votación" : "Elección"}</td>
           <td>${e.is_active ? "Sí" : "No"}</td>
           <td>
-            <a href="/resultados/${e.id}">Resultados</a>
+            <a href="/resultados/${e.id}">Resultados</a> | <a href="/admin/fiscalizacion/${e.id}/votos">Fiscalización</a>
             ${admin.role==="admin" && !e.is_active ? `
               | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>
             ` : ``}
