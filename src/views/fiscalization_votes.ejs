@@ -1,0 +1,30 @@
+<%- include('layout', { title: "Votos individuales", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Votos individuales</h2>
+      <a href="/admin/fiscalizacion">Volver</a>
+    </div>
+    <p><b>${election.title}</b></p>
+    <p class="muted">Vista sensible para fiscalización. Muestra unidad, votante, opción registrada y hashes.</p>
+    <div style="margin:12px 0">
+      <a href="/admin/fiscalizacion/${election.id}/votos.csv"><button class="secondary">Descargar CSV</button></a>
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px">
+      <tr>
+        <th align="left">Unidad</th><th align="left">Representante</th><th align="left">DNI/CE</th><th align="left">Email</th><th align="left">Opción</th><th align="left">Fecha</th><th align="left">Pos.</th><th align="left">Hash</th>
+      </tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${r.unit_label || ""}</td>
+          <td>${r.name || ""}</td>
+          <td>${r.dni || ""}</td>
+          <td>${r.email || ""}</td>
+          <td>${r.option_label ? r.option_label + ". " : ""}${r.option_text || ""}</td>
+          <td>${r.cast_at ? new Date(r.cast_at).toLocaleString("es-PE") : ""}</td>
+          <td>${r.chain_position || ""}</td>
+          <td style="font-family:monospace; word-break:break-all">${r.vote_hash || ""}</td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
