@@ -13,7 +13,7 @@ import { q, pool } from "./db.js";
 import { newToken, hashToken } from "./crypto.js";
 import { canMail, sendVoteLink, sendAdminInvite, sendRegistrationReceived, sendVoteReceipt, sendElectionSealed } from "./mailer.js";
 import { requireAdmin, requireViewerOrAdmin } from "./middleware.js";
-
+import { createActaPdfHandler } from "./actaPdf.js";
 import { createAudit } from "./audit.js";
 const auditEvent = createAudit({ q });
 
@@ -1652,125 +1652,17 @@ app.get("/admin/print/padron", requireViewerOrAdmin, async (req, res) => {
 /* =========================
    ADMIN: ACTA PDF
 ========================= */
-app.get("/admin/acta.pdf", requireViewerOrAdmin, async (req, res) => {
-  const active = await getActiveElection();
-  if (!active) return res.render("no_active");
-
-  const totals = (await q(
-    `SELECT c.name, COUNT(v.id)::int AS votes
-     FROM candidates c
-     LEFT JOIN votes v ON v.candidate_id=c.id AND v.election_id=$1
-     WHERE c.election_id=$1
-     GROUP BY c.id
-     ORDER BY c.sort_order ASC`,
-    [active.id]
-  )).rows;
-
-  const metrics = {
-    votes: (await q(`SELECT COUNT(*)::int AS n FROM votes WHERE election_id=$1`, [active.id])).rows[0].n,
-    approved_regs: (await q(`SELECT COUNT(*)::int AS n FROM registrations WHERE election_id=$1 AND status='APPROVED'`, [active.id])).rows[0].n,
-    pending_regs: (await q(`SELECT COUNT(*)::int AS n FROM registrations WHERE election_id=$1 AND status='PENDING'`, [active.id])).rows[0].n
-  };
-
-  // ---- Anti-cache duro ----
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-
-  // filename único por si algún proxy/browser insiste
-  res.setHeader(
-    "Content-Disposition",
-    `inline; filename="acta_election_${active.id}_${Date.now()}.pdf"`
-  );
-
-  const doc = new PDFDocument({ margin: 50 });
-  doc.pipe(res);
-
-  // ---- Encabezado ----
-  doc.fontSize(16).text("ACTA DE VOTACIÓN DIGITAL", { align: "center" });
-  doc.moveDown(0.5);
-
-  doc.fontSize(12).text(`Elección: ${active.title}`);
-  doc.text(
-    `Fecha/Hora generación (Lima): ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}`
-  );
-
-  doc.moveDown(0.8);
-
-  doc.fontSize(11).text(`Total votos emitidos (Directiva): ${metrics.votes}`);
-  doc.text(`Registros aprobados: ${metrics.approved_regs}`);
-  doc.text(`Registros pendientes: ${metrics.pending_regs}`);
-
-  doc.moveDown(1);
-
-  // ---- Resultados ----
-  doc.fontSize(13).text("Resultados - Concejo Directivo", { underline: true });
-  doc.moveDown(0.6);
-
-  // tabla simple
-  const left = doc.page.margins.left;
-  const right = doc.page.width - doc.page.margins.right;
-
-  const colX = { lista: left, votos: right - 120 };
-  doc.fontSize(11).text("Lista", colX.lista, doc.y, { continued: true });
-  doc.text("Votos", colX.votos, doc.y);
-  doc.moveDown(0.3);
-  doc.moveTo(left, doc.y).lineTo(right, doc.y).stroke();
-  doc.moveDown(0.4);
-
-  for (const t of totals) {
-    if (doc.y > doc.page.height - 140) doc.addPage();
-
-    doc.fontSize(10).text(String(t.name ?? ""), colX.lista, doc.y, { width: (colX.votos - colX.lista - 10), continued: true });
-    doc.text(String(t.votes ?? 0), colX.votos, doc.y);
-    doc.moveDown(0.35);
-  }
-
-  doc.moveDown(1.2);
-
-  // ---- Firmas limpias (sin título) ----
-  const gap = 24;
-  const colW = (right - left - gap) / 2;
-  const x1 = left;
-  const x2 = left + colW + gap;
-  let sy = doc.y;
-
-  function signLine(x, y, label) {
-    doc.fontSize(10).text("______________________________", x, y, { width: colW });
-    doc.fontSize(9).text(label, x, y + 14, { width: colW });
-  }
-
-  // 3 filas
-  signLine(x1, sy, "Presidente(a) Comité Electoral");
-  signLine(x2, sy, "Miembro Comité Electoral");
-
-  sy += 46;
-  signLine(x1, sy, "Miembro Comité Electoral");
-  signLine(x2, sy, "Fiscal");
-
-  sy += 46;
-  signLine(x1, sy, "Personero(a) 1");
-  signLine(x2, sy, "Personero(a) 2");
-
-  // ---- Sello digital ----
-  doc.fontSize(8)
-    .fillColor("gray")
-    .text(
-      "Sistema de votación URBISOL 1.0",
-      0,
-      doc.page.height - 30,
-      { align: "center" }
-    );
-  doc.fillColor("black");
-
-  doc.end();
-
-  await audit("ACTA_PDF_GENERATED", {
-    election_id: active.id,
-    meta_json: { votes: metrics.votes, approved_regs: metrics.approved_regs }
-  });
-});
+app.get(
+  "/admin/acta.pdf",
+  requireViewerOrAdmin,
+  createActaPdfHandler({
+    q,
+    PDFDocument,
+    getActiveElection,
+    getReferendumForElection,
+    audit
+  })
+);
 
 app.get("/admin/padron_v2.pdf", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
