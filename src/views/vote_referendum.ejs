@@ -1,0 +1,54 @@
+<%- include('layout', { title: "Votación", body: `
+<style>
+  .option-card {
+    border: 2px solid #d9d9d9;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .option-card:hover { border-color: #2b7cff; background: #f3f8ff; }
+  .option-card.selected { border-color: #2b7cff; background: #eaf2ff; box-shadow: 0 0 0 3px rgba(43,124,255,0.15); }
+  .option-title { display:flex; justify-content:space-between; align-items:center; font-size:1.05em; font-weight:700; }
+  .check { width:22px; height:22px; border-radius:50%; border:2px solid #bbb; display:flex; align-items:center; justify-content:center; font-size:14px; color:white; background:transparent; }
+  .option-card.selected .check { background:#2b7cff; border-color:#2b7cff; }
+  .hidden-radio { display:none; }
+  .question { font-size:1.05em; margin-top:10px; }
+  .submit-area { margin-top:18px; }
+</style>
+<script>
+  function selectReferendum(id) {
+    document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
+    const card = document.getElementById('card_' + id);
+    const radio = document.getElementById('radio_' + id);
+    if (!card || !radio) return;
+    card.classList.add('selected');
+    radio.checked = true;
+    document.getElementById('confirmBtn').disabled = false;
+  }
+</script>
+<div class="card">
+  <h2>${election.title}</h2>
+  <p class="muted">Votación interna. Elige una opción y confirma tu voto.</p>
+
+  <div class="question"><b>${question.question_text}</b></div>
+
+  <form method="POST" action="/votar/${token}/referendum">
+    ${options.map(o => `
+      <div class="option-card" id="card_${o.id}" onclick="selectReferendum('${o.id}')">
+        <div class="option-title">
+          <span>${o.option_label ? o.option_label + '. ' : ''}${o.option_text}</span>
+          <span class="check">✓</span>
+        </div>
+        <input class="hidden-radio" id="radio_${o.id}" type="radio" name="option_id" value="${o.id}" required />
+      </div>
+    `).join('')}
+
+    <div class="submit-area">
+      <button id="confirmBtn" class="ok" type="submit" disabled>Confirmar voto</button>
+      <p class="muted">Al confirmar, tu enlace quedará usado y no podrá reutilizarse.</p>
+    </div>
+  </form>
+</div>
+` }) %>
