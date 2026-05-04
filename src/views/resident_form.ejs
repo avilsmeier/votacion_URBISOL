@@ -1,0 +1,40 @@
+<%- include('layout', { title: resident ? "Editar residente" : "Nuevo residente", body: `
+  <div class="card">
+    <div class="topbar"><h2>${resident ? "Editar residente" : "Nuevo residente"}</h2><a href="/admin/residentes">Volver</a></div>
+
+    <form method="POST" action="${resident ? `/admin/residentes/${resident.id}/edit` : `/admin/residentes/new`}">
+      <label>Calle</label>
+      <select name="street" required>
+        ${streets.map(s => `<option value="${s}" ${resident && resident.street === s ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+
+      <label>Numero o No</label>
+      <input name="number" value="${resident ? resident.number : ""}" required />
+
+      <label>Piso/Depto</label>
+      <input name="unit_extra" value="${resident && resident.unit_extra ? resident.unit_extra : ""}" />
+
+      <label>Nombre</label>
+      <input name="name" value="${resident ? resident.name : ""}" required />
+
+      <label>DNI/CE</label>
+      <input name="dni" value="${resident && resident.dni ? resident.dni : ""}" />
+
+      <label>Telefono</label>
+      <input name="phone" value="${resident && resident.phone ? resident.phone : ""}" />
+
+      <label>Email</label>
+      <input name="email" type="email" value="${resident && resident.email ? resident.email : ""}" />
+
+      <label>Estado</label>
+      <select name="status">
+        ${["ACTIVE", "INACTIVE", "BLOCKED"].map(st => `<option value="${st}" ${resident && resident.status === st ? "selected" : ""}>${st}</option>`).join("")}
+      </select>
+
+      <label>Notas internas</label>
+      <textarea name="notes" style="min-height:80px">${resident && resident.notes ? resident.notes : ""}</textarea>
+
+      <button class="ok" type="submit">Guardar</button>
+    </form>
+  </div>
+` }) %>
