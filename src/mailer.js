@@ -107,10 +107,11 @@ export async function sendVoteReceipt({
   });
 }
 
-export async function sendElectionSealed({ to, electionTitle, resultsUrl, hashesText }) {
+export async function sendElectionSealed({ to, electionTitle, resultsUrl, hashesText, resultsText = "" }) {
+  const resultsBlock = resultsText ? `\nResumen de resultados:\n${resultsText}\n` : "";
   return sendPlain({
     to,
     subject: `Resultados sellados - ${electionTitle}`,
-    text: `Hola,\n\nLa campaña fue cerrada y sellada:\n${electionTitle}\n\nResultados:\n${resultsUrl}\n\nSellos/hash de integridad:\n${hashesText}\n\nEstos hashes permiten verificar que los resultados no fueron modificados luego del sellado.\n\n${supportEmail()}`
+    text: `Hola,\n\nLa campaña fue cerrada y sellada:\n${electionTitle}\n${resultsBlock}\nResultados publicados:\n${resultsUrl}\n\nSellos/hash de integridad:\n${hashesText}\n\nEstos hashes permiten verificar que los resultados no fueron modificados luego del sellado.\n\n${supportEmail()}`
   });
 }
