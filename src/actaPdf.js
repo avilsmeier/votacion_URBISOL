@@ -86,7 +86,7 @@ export function createActaPdfHandler({ q, PDFDocument, getActiveElection, getRef
     doc.text(`Registros pendientes: ${metrics.pending_regs}`);
     doc.moveDown(1);
 
-    doc.fontSize(13).text(active.kind === "VOTACION" ? "Resultados - Votación interna" : "Resultados - Concejo Directivo", { underline: true });
+    doc.fontSize(13).text(active.kind === "VOTACION" ? "Resultados - Votación interna" : "Resultados - Consejo Directivo", { underline: true });
     doc.moveDown(0.6);
 
     const colX = { item: left, votes: right - 120 };
@@ -134,11 +134,11 @@ export function createActaPdfHandler({ q, PDFDocument, getActiveElection, getRef
       doc.fontSize(9).text(label, x, y + 14, { width: colW });
     }
 
-    signLine(x1, sy, "Presidente(a) Comité Electoral");
-    signLine(x2, sy, "Miembro Comité Electoral");
+    signLine(x1, sy, "Presidente(a) Consejo Directivo");
+    signLine(x2, sy, "Miembro Consejo Directivo");
 
     sy += 46;
-    signLine(x1, sy, "Miembro Comité Electoral");
+    signLine(x1, sy, "Miembro Consejo Directivo");
     signLine(x2, sy, "Fiscal");
 
     sy += 46;
