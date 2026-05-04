@@ -1,7 +1,7 @@
 <%- include('layout', { title: election.title, body: `
   <div class="card">
     <h2>${election.title}</h2>
-    <p class="muted">Votación digital opcional (complementaria a la urna física).</p>
+    <p class="muted">Votación digital oficial para la campaña activa.</p>
 
     <p><b>Registro:</b> ${regOpen ? "ABIERTO ✅" : "CERRADO ❌"}</p>
     <p><b>Votación:</b> ${voteOpen ? "ABIERTA ✅" : "CERRADA ❌"}</p>
@@ -13,11 +13,15 @@
 
     <div class="row" style="margin-top:14px">
       <a href="/registro"><button class="ok" ${regOpen ? "" : "disabled"}>Registrarme</button></a>
-      <a href="/resultados/${election.id}"><button>Ver resultados</button></a>
+      ${voteOpen ? `
+        <button disabled title="Los resultados se publican al cierre de la votación">Resultados disponibles al cierre</button>
+      ` : `
+        <a href="/resultados/${election.id}"><button>Ver resultados</button></a>
+      `}
     </div>
 
-    <div style="margin-top:10px">
-      <a href="/admin/login">Ingreso Comité Electoral</a>
+    <div class="admin-link">
+      <a href="/admin/login">Ingreso Consejo Directivo</a>
     </div>
 
     ${previous.length ? `
