@@ -12,7 +12,7 @@ import crypto from "crypto";
 import { q, pool } from "./db.js";
 import { newToken, hashToken } from "./crypto.js";
 import { canMail, sendVoteLink, sendAdminInvite, sendRegistrationReceived, sendVoteReceipt, sendElectionSealed } from "./mailer.js";
-import { requireAdmin, requireViewerOrAdmin } from "./middleware.js";
+import { requireAdmin, requireFiscalOrAdmin, requireViewerOrAdmin } from "./middleware.js";
 import { createActaPdfHandler } from "./actaPdf.js";
 import { createAudit } from "./audit.js";
 const auditEvent = createAudit({ q });
@@ -605,6 +605,60 @@ async function getReferendumForElection(electionId) {
   return { question, options };
 }
 
+function newReceiptCode() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+async function createVoteReceipt(client, { election_id, registration_id, unit_id, vote_kind, vote_table, vote_id, vote_hash }) {
+  const receiptCode = newReceiptCode();
+  const receiptHash = sha256Hex(receiptCode);
+  await client.query(
+    `INSERT INTO vote_receipts(election_id, registration_id, unit_id, vote_kind, vote_table, vote_id, vote_hash, receipt_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (vote_table, vote_id) DO UPDATE SET receipt_hash=EXCLUDED.receipt_hash
+     RETURNING id`,
+    [election_id, registration_id, unit_id, vote_kind, vote_table, vote_id, vote_hash, receiptHash]
+  );
+  return receiptCode;
+}
+
+async function lookupVoteReceipt({ receiptCode, identity }) {
+  const code = String(receiptCode || "").trim();
+  const ident = String(identity || "").trim().toLowerCase();
+  if (!code || !ident) return null;
+  const receiptHash = sha256Hex(code);
+
+  return (await q(
+    `SELECT
+       vr.id AS receipt_id,
+       vr.vote_kind,
+       vr.vote_hash,
+       e.id AS election_id,
+       e.title AS election_title,
+       e.kind AS election_kind,
+       r.id AS registration_id,
+       r.name,
+       r.dni,
+       r.email,
+       u.label AS unit_label,
+       rv.cast_at,
+       rv.chain_position,
+       rv.previous_hash,
+       ro.option_label,
+       ro.option_text
+     FROM vote_receipts vr
+     JOIN elections e ON e.id=vr.election_id
+     JOIN registrations r ON r.id=vr.registration_id
+     JOIN units u ON u.id=vr.unit_id
+     LEFT JOIN referendum_votes rv ON vr.vote_table='referendum_votes' AND rv.id=vr.vote_id
+     LEFT JOIN referendum_options ro ON ro.id=rv.option_id
+     WHERE vr.receipt_hash=$1
+       AND (lower(COALESCE(r.email,''))=$2 OR lower(COALESCE(r.dni,''))=$2)
+     LIMIT 1`,
+    [receiptHash, ident]
+  )).rows[0] || null;
+}
+
 function cleanText(v) {
   const s = String(v || "").trim();
   return s || null;
@@ -737,6 +791,23 @@ app.get("/", async (req, res) => {
   )).rows;
 
   res.render("index", { election, regOpen, voteOpen, metrics, previous });
+});
+
+app.get("/verificar-voto", async (req, res) => {
+  res.render("verify_vote", { receipt: String(req.query.receipt || ""), identity: "", result: null, error: null });
+});
+
+app.post("/verificar-voto", async (req, res) => {
+  const receipt = String(req.body.receipt || "").trim();
+  const identity = String(req.body.identity || "").trim();
+  const result = await lookupVoteReceipt({ receiptCode: receipt, identity });
+  if (!result) {
+    await audit("VOTE_RECEIPT_VERIFY_FAILED", { meta_json: { has_receipt: !!receipt, has_identity: !!identity }});
+    return res.render("verify_vote", { receipt, identity, result: null, error: "No encontramos un voto con esos datos. Revisa el código y el DNI/correo." });
+  }
+
+  await audit("VOTE_RECEIPT_VERIFY_OK", { election_id: result.election_id, registration_id: result.registration_id, meta_json: { receipt_id: result.receipt_id, vote_kind: result.vote_kind }});
+  res.render("verify_vote", { receipt, identity, result, error: null });
 });
 
 /* =========================
@@ -1033,6 +1104,68 @@ app.get("/resultados/:electionId", async (req, res) => {
   res.render("public_results", { election, totals, metrics });
 });
 
+app.get("/admin/fiscalizacion", requireFiscalOrAdmin, async (req, res) => {
+  const rows = (await q(
+    `SELECT e.id, e.title, e.kind, e.is_active,
+            COALESCE(rv.n,0) + COALESCE(v.n,0) + COALESCE(fv.n,0) AS total_votes,
+            COALESCE(es.n,0) AS seals
+     FROM elections e
+     LEFT JOIN (SELECT election_id, COUNT(*)::int n FROM referendum_votes GROUP BY election_id) rv ON rv.election_id=e.id
+     LEFT JOIN (SELECT election_id, COUNT(*)::int n FROM votes GROUP BY election_id) v ON v.election_id=e.id
+     LEFT JOIN (SELECT election_id, COUNT(*)::int n FROM fiscal_votes GROUP BY election_id) fv ON fv.election_id=e.id
+     LEFT JOIN (SELECT election_id, COUNT(*)::int n FROM election_seals GROUP BY election_id) es ON es.election_id=e.id
+     ORDER BY e.id DESC`
+  )).rows;
+  res.render("fiscalization", { admin: req.session.admin, rows });
+});
+
+async function getFiscalizationRows(electionId) {
+  const election = (await q(`SELECT * FROM elections WHERE id=$1`, [electionId])).rows[0];
+  if (!election) return { election: null, rows: [] };
+
+  const rows = election.kind === "VOTACION" ? (await q(
+    `SELECT u.label AS unit_label, r.name, r.dni, r.email,
+            ro.option_label, ro.option_text,
+            rv.cast_at, rv.chain_position, rv.previous_hash, rv.vote_hash
+     FROM referendum_votes rv
+     JOIN units u ON u.id=rv.unit_id
+     JOIN registrations r ON r.election_id=rv.election_id AND r.unit_id=rv.unit_id
+     JOIN referendum_options ro ON ro.id=rv.option_id
+     WHERE rv.election_id=$1
+     ORDER BY rv.chain_position ASC`,
+    [electionId]
+  )).rows : (await q(
+    `SELECT u.label AS unit_label, r.name, r.dni, r.email,
+            c.list_code AS option_label, c.name AS option_text,
+            v.cast_at, v.chain_position, v.previous_hash, v.vote_hash
+     FROM votes v
+     JOIN units u ON u.id=v.unit_id
+     JOIN registrations r ON r.election_id=v.election_id AND r.unit_id=v.unit_id
+     JOIN candidates c ON c.id=v.candidate_id
+     WHERE v.election_id=$1
+     ORDER BY v.chain_position ASC`,
+    [electionId]
+  )).rows;
+
+  return { election, rows };
+}
+
+app.get("/admin/fiscalizacion/:electionId/votos", requireFiscalOrAdmin, async (req, res) => {
+  const { election, rows } = await getFiscalizationRows(Number(req.params.electionId));
+  if (!election) return res.status(404).send("Campaña no existe.");
+  await audit("FISCALIZATION_VIEWED", { actor_admin_id: req.session.admin.id, election_id: election.id, meta_json: { rows: rows.length }});
+  res.render("fiscalization_votes", { admin: req.session.admin, election, rows });
+});
+
+app.get("/admin/fiscalizacion/:electionId/votos.csv", requireFiscalOrAdmin, async (req, res) => {
+  const { election, rows } = await getFiscalizationRows(Number(req.params.electionId));
+  if (!election) return res.status(404).send("Campaña no existe.");
+  await audit("FISCALIZATION_EXPORTED", { actor_admin_id: req.session.admin.id, election_id: election.id, meta_json: { rows: rows.length }});
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="fiscalizacion_${election.id}.csv"`);
+  res.send(toCSV(rows));
+});
+
 /* =========================
    ADMIN: LOGIN
 ========================= */
@@ -1186,7 +1319,8 @@ app.get("/admin/users", requireAdmin, async (req, res) => {
 app.post("/admin/users/new", requireAdmin, async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const secret = String(req.body.secret || "");
-  const role = String(req.body.role || "viewer") === "admin" ? "admin" : "viewer";
+  const rawRole = String(req.body.role || "viewer");
+  const role = ["admin", "fiscal", "viewer"].includes(rawRole) ? rawRole : "viewer";
   if (!email || !secret) return res.status(400).send("Email y clave son obligatorios.");
 
   const hash = await bcrypt.hash(secret, 12);
@@ -1211,7 +1345,8 @@ app.post("/admin/users/new", requireAdmin, async (req, res) => {
 
 app.post("/admin/users/:id/role", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  const role = String(req.body.role || "viewer") === "admin" ? "admin" : "viewer";
+  const rawRole = String(req.body.role || "viewer");
+  const role = ["admin", "fiscal", "viewer"].includes(rawRole) ? rawRole : "viewer";
   if (id === req.session.admin.id && role !== "admin") return res.status(400).send("No puedes quitarte tu propio rol admin.");
 
   await q(`UPDATE admin_users SET role=$1, updated_at=now() WHERE id=$2`, [role, id]);
