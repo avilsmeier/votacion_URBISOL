@@ -24,6 +24,25 @@ function supportEmail() {
   return process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || "Consejo Directivo";
 }
 
+function formatLima(dt) {
+  if (!dt) return null;
+  return new Date(dt).toLocaleString("es-PE", { timeZone: "America/Lima" });
+}
+
+function googleCalendarUrl({ title, start, end, details }) {
+  if (!start) return null;
+  const s = new Date(start);
+  const e = end ? new Date(end) : new Date(s.getTime() + 60 * 60 * 1000);
+  const fmt = d => d.toISOString().replace(/[-:]|\.\d{3}/g, "");
+  const p = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title || "Votación Isla del Sol",
+    dates: `${fmt(s)}/${fmt(e)}`,
+    details: details || "Inicio de votación digital."
+  });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
+
 async function sendPlain({ to, subject, text }) {
   if (!canMail()) return false;
   const transport = makeTransport();
@@ -36,8 +55,8 @@ async function sendPlain({ to, subject, text }) {
   return true;
 }
 
-export async function sendVoteLink({ to, link, electionTitle = "la campaña activa" }) {
-  return sendRegistrationApproved({ to, link, electionTitle });
+export async function sendVoteLink({ to, link, electionTitle = "la campaña activa", voteOpenAt = null, voteCloseAt = null }) {
+  return sendRegistrationApproved({ to, link, electionTitle, voteOpenAt, voteCloseAt });
 }
 
 export async function sendAdminInvite({ to, role, secret, loginUrl }) {
@@ -56,11 +75,24 @@ export async function sendRegistrationReceived({ to, name, electionTitle }) {
   });
 }
 
-export async function sendRegistrationApproved({ to, link, electionTitle }) {
+export async function sendRegistrationApproved({ to, link, electionTitle, voteOpenAt = null, voteCloseAt = null }) {
+  const openText = formatLima(voteOpenAt);
+  const closeText = formatLima(voteCloseAt);
+  const calUrl = googleCalendarUrl({
+    title: `Votación: ${electionTitle}`,
+    start: voteOpenAt,
+    end: voteCloseAt,
+    details: `Inicio de votación digital para ${electionTitle}. Enlace único: ${link}`
+  });
+
+  const timing = openText
+    ? `\nInicio de votación: ${openText}${closeText ? `\nCierre de votación: ${closeText}` : ""}\n${calUrl ? `\nAgregar a Google Calendar:\n${calUrl}\n` : ""}`
+    : "";
+
   return sendPlain({
     to,
     subject: `Enlace único de votación - ${electionTitle}`,
-    text: `Hola,\n\nTu solicitud fue aprobada para:\n${electionTitle}\n\nEnlace único de votación:\n${link}\n\nEste enlace es personal y de uso único. Guárdalo y verifica que puedes abrirlo antes de la ventana de votación.\n\n${supportEmail()}`
+    text: `Hola,\n\nTu solicitud fue aprobada para:\n${electionTitle}\n${timing}\nEnlace único de votación:\n${link}\n\nEste enlace es personal y de uso único. Guárdalo y verifica que puedes abrirlo antes de la ventana de votación.\n\n${supportEmail()}`
   });
 }
 
