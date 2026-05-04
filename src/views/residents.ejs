@@ -1,0 +1,26 @@
+<%- include('layout', { title: "Padrón maestro", body: `
+  <div class="card">
+    <div class="topbar"><h2>Padrón maestro</h2><a href="/admin">Volver</a></div>
+    <p class="muted">Base reutilizable de residentes. Importar a una campaña crea solicitudes PENDING, no aprobadas.</p>
+
+    <form method="GET" action="/admin/residentes" style="margin:12px 0">
+      <input name="q" value="${search || ""}" placeholder="Buscar por nombre, DNI, teléfono, correo o unidad" />
+      <button type="submit">Buscar</button>
+      <a href="/admin/residentes/new"><button type="button" class="ok">Nuevo residente</button></a>
+    </form>
+
+    <form method="POST" action="/admin/residentes/importar-campana" style="margin:12px 0">
+      <button type="submit">Importar padrón a campaña activa como PENDING</button>
+    </form>
+
+    <table style="width:100%; border-collapse:collapse">
+      <tr><th align="left">Unidad</th><th align="left">Nombre</th><th align="left">DNI/CE</th><th align="left">Teléfono</th><th align="left">Email</th><th align="left">Estado</th><th align="left">Acciones</th></tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${r.unit_label}</td><td>${r.name}</td><td>${r.dni || ""}</td><td>${r.phone || ""}</td><td>${r.email || ""}</td><td>${r.status}</td>
+          <td><a href="/admin/residentes/${r.id}/edit">Editar</a></td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
