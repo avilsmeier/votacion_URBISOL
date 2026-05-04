@@ -1,5 +1,19 @@
 -- Admin UI + padron maestro de residentes
--- Ejecutar una vez en PostgreSQL: psql "$DATABASE_URL" -f migrations/20260504_admins_and_resident_registry.sql
+-- Ejecutar una vez en la MISMA base que usa la app:
+--   set -a; source .env; set +a; psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/20260504_admins_and_resident_registry.sql
+--
+-- Esta migracion asume que el esquema base ya existe. Si falla diciendo que no
+-- existen admin_users o units, estas conectado a otra base o aun no cargaste el esquema base.
+
+DO $$
+BEGIN
+  IF to_regclass('public.admin_users') IS NULL THEN
+    RAISE EXCEPTION 'Falta tabla public.admin_users. Revisa DATABASE_URL o carga primero el esquema base.';
+  END IF;
+  IF to_regclass('public.units') IS NULL THEN
+    RAISE EXCEPTION 'Falta tabla public.units. Revisa DATABASE_URL o carga primero el esquema base.';
+  END IF;
+END $$;
 
 ALTER TABLE admin_users
   ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT true,
