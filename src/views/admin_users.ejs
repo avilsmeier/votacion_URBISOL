@@ -1,0 +1,25 @@
+<%- include('layout', { title: "Administradores", body: `
+  <div class="card">
+    <div class="topbar"><h2>Administradores</h2><a href="/admin">Volver</a></div>
+    <p class="muted">Rol admin modifica. Rol viewer solo consulta.</p>
+    <h3>Crear usuario</h3>
+    <form method="POST" action="/admin/users/new">
+      <label>Email</label><input name="email" type="email" required />
+      <label>Clave inicial</label><input name="secret" type="text" required />
+      <label>Rol</label><select name="role"><option value="viewer">viewer</option><option value="admin">admin</option></select>
+      <button class="ok" type="submit">Crear</button>
+    </form>
+    <hr/>
+    <h3>Usuarios existentes</h3>
+    <table style="width:100%; border-collapse:collapse">
+      <tr><th align="left">Email</th><th align="left">Rol</th><th align="left">Estado</th><th align="left">Acciones</th></tr>
+      ${users.map(u => `
+        <tr style="border-top:1px solid #eee"><td>${u.email}</td><td>${u.role}</td><td>${u.enabled ? "Activo" : "Desactivado"}</td><td>
+          <form method="POST" action="/admin/users/${u.id}/role" style="display:inline"><select name="role"><option value="viewer" ${u.role === "viewer" ? "selected" : ""}>viewer</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option></select><button type="submit">Rol</button></form>
+          <form method="POST" action="/admin/users/${u.id}/secret" style="display:inline"><input name="secret" type="text" placeholder="Nueva clave" style="width:120px" /><button type="submit">Clave</button></form>
+          ${u.id === admin.id ? `<span class="muted">Actual</span>` : `<form method="POST" action="/admin/users/${u.id}/toggle" style="display:inline"><button type="submit">${u.enabled ? "Desactivar" : "Activar"}</button></form>`}
+        </td></tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
