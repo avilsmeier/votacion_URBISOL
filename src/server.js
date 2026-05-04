@@ -236,6 +236,31 @@ app.use(rateLimit({
   legacyHeaders: false
 }));
 
+// Bloqueo global post-sellado: una campaña sellada queda congelada.
+app.use(async (req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+
+  const allow =
+    req.path === "/admin/logout" ||
+    req.path === "/admin/verify" ||
+    req.path === "/admin/notifications/sealed" ||
+    new RegExp("^/admin/elections/\\d+/close$").test(req.path);
+
+  if (allow) return next();
+
+  try {
+    const election = await getActiveElection();
+    if (election && await isElectionSealed(election.id)) {
+      return res.status(403).send("La campaña ya fue sellada. No se permiten cambios ni nuevos votos. Puedes desactivarla desde el panel para cerrar la publicación activa.");
+    }
+  } catch (e) {
+    console.error("sealed lockdown check failed", e);
+    return res.status(500).send("Error validando estado de campaña.");
+  }
+
+  return next();
+});
+
 async function computeGlobalHash(client, electionId, kind /* 'COUNCIL' | 'FISCAL' | 'REFERENDUM' */) {
   const table = kind === "FISCAL" ? "fiscal_votes" : (kind === "REFERENDUM" ? "referendum_votes" : "votes");
 
@@ -355,7 +380,10 @@ app.post("/admin/notifications/sealed", requireAdmin, async (req, res) => {
 
 app.get("/admin/verify", requireViewerOrAdmin, async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.render("no_active");
+  if (!election) {
+    const latestFinished = await getLatestFinishedElection();
+    return res.render("no_active", { latestFinished });
+  }
   res.render("verify", { result: null });
 });
 
@@ -471,6 +499,15 @@ async function sendEmailNotification({ template, recipient, election_id = null, 
 async function getActiveElection() {
   const r = await q(`SELECT * FROM elections WHERE is_active=true LIMIT 1`);
   return r.rows[0] || null;
+}
+
+async function isElectionSealed(electionId) {
+  const r = await q(`SELECT 1 FROM election_seals WHERE election_id=$1 LIMIT 1`, [electionId]);
+  return r.rows.length > 0;
+}
+
+async function getLatestFinishedElection() {
+  return (await q(`SELECT * FROM elections WHERE is_active=false ORDER BY id DESC LIMIT 1`)).rows[0] || null;
 }
 
 function inWindow(n, start, end) {
