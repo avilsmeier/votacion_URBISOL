@@ -1,7 +1,12 @@
 <%- include('layout', { title: "Voto registrado", body: `
   <div class="card">
     <h2>Voto registrado ✅</h2>
-    <p class="muted">Se registraron ambos votos (Directiva y Fiscales). Tu enlace ya no se puede reutilizar.</p>
+    ${election && election.kind === "VOTACION" ? `
+      <p class="muted">Tu voto fue registrado correctamente. Tu enlace ya no se puede reutilizar.</p>
+      <p class="muted">Recibirás un correo con la opción registrada, el hash del voto y el código para validar tu voto.</p>
+    ` : `
+      <p class="muted">Se registraron ambos votos (Directiva y Fiscales). Tu enlace ya no se puede reutilizar.</p>
+    `}
     <a href="/"><button>Volver</button></a>
   </div>
 ` }) %>
