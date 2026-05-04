@@ -240,13 +240,28 @@ app.use(rateLimit({
 app.use(async (req, res, next) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
 
-  const allow =
+  const allowedEvenWhenSealed =
     req.path === "/admin/logout" ||
     req.path === "/admin/verify" ||
     req.path === "/admin/notifications/sealed" ||
+    req.path === "/admin/elections/new" ||
+    req.path.startsWith("/admin/users") ||
+    req.path.startsWith("/admin/residentes") ||
     new RegExp("^/admin/elections/\\d+/close$").test(req.path);
 
-  if (allow) return next();
+  if (allowedEvenWhenSealed) return next();
+
+  const sealedCampaignMutation =
+    req.path.startsWith("/votar/") ||
+    req.path.startsWith("/admin/solicitudes") ||
+    req.path.startsWith("/admin/votacion") ||
+    req.path.startsWith("/admin/directiva") ||
+    req.path.startsWith("/admin/fiscales") ||
+    req.path === "/admin/election/edit" ||
+    req.path === "/admin/importar-campana" ||
+    req.path === "/admin/seal";
+
+  if (!sealedCampaignMutation) return next();
 
   try {
     const election = await getActiveElection();
@@ -360,6 +375,30 @@ app.post("/admin/notifications/sealed", requireAdmin, async (req, res) => {
   const hashesText = seals.map(s => `${s.kind}: ${s.global_hash} (votos: ${s.total_votes})`).join("\n");
   const resultsUrl = absoluteUrl(`/resultados/${election.id}`);
 
+  let resultRows = [];
+  if (election.kind === "VOTACION") {
+    resultRows = (await q(
+      `SELECT ro.option_label AS code, ro.option_text AS name, COUNT(rv.id)::int AS votes
+       FROM referendum_options ro
+       LEFT JOIN referendum_votes rv ON rv.option_id=ro.id AND rv.election_id=$1
+       WHERE ro.election_id=$1
+       GROUP BY ro.id
+       ORDER BY ro.sort_order ASC, ro.id ASC`,
+      [election.id]
+    )).rows;
+  } else {
+    resultRows = (await q(
+      `SELECT c.list_code AS code, c.name, COUNT(v.id)::int AS votes
+       FROM candidates c
+       LEFT JOIN votes v ON v.candidate_id=c.id AND v.election_id=$1
+       WHERE c.election_id=$1
+       GROUP BY c.id
+       ORDER BY c.sort_order ASC, c.id ASC`,
+      [election.id]
+    )).rows;
+  }
+  const resultsText = resultRows.map(r => `${r.code ? r.code + ". " : ""}${r.name}: ${r.votes} voto(s)`).join("\n");
+
   let sent = 0;
   let failed = 0;
   for (const r of recipients) {
@@ -369,7 +408,7 @@ app.post("/admin/notifications/sealed", requireAdmin, async (req, res) => {
       election_id: election.id,
       registration_id: r.id,
       meta_json: { hashes: seals.map(s => ({ kind: s.kind, global_hash: s.global_hash, total_votes: s.total_votes })) },
-      send: () => sendElectionSealed({ to: r.email, electionTitle: election.title, resultsUrl, hashesText })
+      send: () => sendElectionSealed({ to: r.email, electionTitle: election.title, resultsUrl, hashesText, resultsText })
     });
     if (ok) sent++; else failed++;
   }
@@ -389,7 +428,10 @@ app.get("/admin/verify", requireViewerOrAdmin, async (req, res) => {
 
 app.post("/admin/verify", requireViewerOrAdmin, async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.render("no_active");
+  if (!election) {
+    const latestFinished = await getLatestFinishedElection();
+    return res.render("no_active", { latestFinished });
+  }
 
   const external = String(req.body?.external_hash || "").trim() || null;
   const c = await pool.connect();
@@ -770,7 +812,10 @@ async function getActiveElectionOrLatest() {
 ========================= */
 app.get("/", async (req, res) => {
   const election = await getActiveElection();
-  if (!election) return res.render("no_active");
+  if (!election) {
+    const latestFinished = await getLatestFinishedElection();
+    return res.render("no_active", { latestFinished });
+  }
 
   const n = now();
   const regOpen = inWindow(n, election.reg_open_at, election.reg_close_at);
