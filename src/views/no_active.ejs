@@ -1,0 +1,12 @@
+<%- include('layout', { title: "Sistema de Votación", body: `
+  <div class="card">
+    <h2>Sistema de Votación Isla del Sol</h2>
+    <p>No hay una campaña activa en este momento.</p>
+    <p class="muted">Puedes ingresar al panel administrativo para crear o activar una campaña.</p>
+
+    <div class="row" style="margin-top:14px">
+      <a href="/admin/login"><button class="ok">Ingresar como administrador</button></a>
+      <a href="/resultados"><button>Ver resultados activos</button></a>
+    </div>
+  </div>
+` }) %>
