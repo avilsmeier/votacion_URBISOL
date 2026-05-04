@@ -11,8 +11,8 @@
     </div>
 
     ${active ? `
-      <h3>Elección activa</h3>
-      <p><b>${active.title}</b></p>
+      <h3>Campaña activa</h3>
+      <p><b>${active.title}</b> · <span class="pill">${active.kind === "VOTACION" ? "Votación interna" : "Elección"}</span></p>
       <p class="muted">Registro: ${new Date(active.reg_open_at).toLocaleString("es-PE")} → ${new Date(active.reg_close_at).toLocaleString("es-PE")}</p>
       <p class="muted">Votación: ${new Date(active.vote_open_at).toLocaleString("es-PE")} → ${new Date(active.vote_close_at).toLocaleString("es-PE")}</p>
 
@@ -24,10 +24,16 @@
         <a href="/admin/resultados"><button class="ok">Resultados</button></a>
       </div>
 
-      <div class="row" style="margin-top:12px">
-        <a href="/admin/directiva"><button class="ok">Listas</button></a>
-        <a href="/admin/fiscales"><button class="ok">Fiscales</button></a>
-      </div>
+      ${active.kind === "VOTACION" ? `
+        <div class="row" style="margin-top:12px">
+          <a href="/admin/votacion"><button class="ok">Configurar votación</button></a>
+        </div>
+      ` : `
+        <div class="row" style="margin-top:12px">
+          <a href="/admin/directiva"><button class="ok">Listas</button></a>
+          <a href="/admin/fiscales"><button class="ok">Fiscales</button></a>
+        </div>
+      `}
 
       <div class="row" style="margin-top:12px">
         <a href="/admin/election/edit"><button class="ok">Editar Campaña</button></a>
@@ -49,29 +55,30 @@
 
       <div class="row" style="margin-top:14px">
         <form method="POST" action="/admin/seal" style="display:inline">
-          <button class="ok" style="background:#8b0000">Cerrar y Sellar Elección</button>
+          <button class="ok" style="background:#8b0000">Cerrar y Sellar Campaña</button>
         </form>
         <a href="/admin/verify"><button>Verificar Integridad</button></a>
       </div>
 
     ` : `
-      <p>No hay elección activa.</p>
+      <p>No hay campaña activa.</p>
     `}
 
     ${admin.role === "admin" ? `
       <hr/>
       <h3>Campañas</h3>
-      <a href="/admin/elections/new"><button class="ok">Crear nueva elección</button></a>
+      <a href="/admin/elections/new"><button class="ok">Crear nueva campaña</button></a>
     ` : ``}
 
     <hr/>
     <h3>Histórico</h3>
     <table style="width:100%; border-collapse:collapse">
-      <tr><th align="left">ID</th><th align="left">Título</th><th align="left">Activa</th><th align="left">Acciones</th></tr>
+      <tr><th align="left">ID</th><th align="left">Título</th><th align="left">Tipo</th><th align="left">Activa</th><th align="left">Acciones</th></tr>
       ${elections.map(e => `
         <tr style="border-top:1px solid #eee">
           <td>${e.id}</td>
           <td>${e.title}</td>
+          <td>${e.kind === "VOTACION" ? "Votación" : "Elección"}</td>
           <td>${e.is_active ? "Sí" : "No"}</td>
           <td>
             <a href="/resultados/${e.id}">Resultados</a>
