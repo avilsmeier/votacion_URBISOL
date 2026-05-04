@@ -1,15 +1,21 @@
-<%- include('layout', { title: "Nueva elección", body: `
+<%- include('layout', { title: "Nueva campaña", body: `
   <div class="card">
     <div class="topbar">
-      <h2>Nueva elección</h2>
+      <h2>Nueva campaña</h2>
       <a href="/admin">Volver</a>
     </div>
 
     <p class="muted">
-      Selecciona fecha y hora (hora Lima). No hace falta escribir formatos.
+      Selecciona tipo de campaña y fecha/hora (hora Lima). No hace falta escribir formatos.
     </p>
 
     <form method="POST" action="/admin/elections/new">
+      <label>Tipo de campaña</label>
+      <select name="kind" required>
+        <option value="ELECTION">Elección: Directiva + Fiscales</option>
+        <option value="VOTACION">Votación interna / Referéndum</option>
+      </select>
+
       <label>Título</label>
       <input name="title" required />
 
@@ -30,7 +36,7 @@
 
     <hr/>
     <p class="muted">
-      Tip: si tu servidor está con TZ=America/Lima, esto queda exacto.
+      Para una votación interna, luego entra al panel y usa "Configurar votación" para cargar la pregunta y opciones.
     </p>
   </div>
 ` }) %>
