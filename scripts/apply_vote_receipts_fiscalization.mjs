@@ -20,6 +20,25 @@ patch("middleware import fiscal", txt => txt.replace(
   'import { requireAdmin, requireFiscalOrAdmin, requireViewerOrAdmin } from "./middleware.js";'
 ));
 
+patch("approval email campaign title and dates", txt => txt
+  .replace(
+    'send: () => sendVoteLink({ to: email, link })',
+    'send: () => sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at })'
+  )
+  .replace(
+    'send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title })',
+    'send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at })'
+  )
+  .replace(
+    'const sent = await sendVoteLink({ to: email, link });',
+    'const sent = await sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });'
+  )
+  .replace(
+    'const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title });',
+    'const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });'
+  )
+);
+
 const helperBlock = [
   "function newReceiptCode() {",
   "  return crypto.randomBytes(32).toString(\"hex\");",
