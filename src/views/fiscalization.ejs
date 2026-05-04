@@ -1,0 +1,18 @@
+<%- include('layout', { title: "Fiscalización", body: `
+  <div class="card">
+    <div class="topbar">
+      <h2>Fiscalización</h2>
+      <a href="/admin">Volver</a>
+    </div>
+    <p class="muted">Vista de control para administradores y fiscales.</p>
+    <table style="width:100%; border-collapse:collapse">
+      <tr><th align="left">ID</th><th align="left">Campaña</th><th align="left">Tipo</th><th align="left">Activa</th><th align="left">Votos</th><th align="left">Sellos</th><th align="left">Acciones</th></tr>
+      ${rows.map(r => `
+        <tr style="border-top:1px solid #eee">
+          <td>${r.id}</td><td>${r.title}</td><td>${r.kind === "VOTACION" ? "Votación" : "Elección"}</td><td>${r.is_active ? "Sí" : "No"}</td><td>${r.total_votes}</td><td>${r.seals}</td>
+          <td><a href="/admin/fiscalizacion/${r.id}/votos">Detalle</a> | <a href="/admin/fiscalizacion/${r.id}/votos.csv">CSV</a></td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+` }) %>
