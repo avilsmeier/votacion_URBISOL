@@ -1562,7 +1562,7 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
 
   // Siempre intentamos enviar por correo
   try {
-    const sent = await sendVoteLink({ to: email, link });
+    const sent = await sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });
     await audit("TOKEN_EMAIL_SENT", {
       actor_admin_id: req.session.admin.id,
       election_id: active.id,
@@ -1621,7 +1621,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   });
 
   try {
-    const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title });
+    const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });
     await audit("TOKEN_EMAIL_SENT", {
       actor_admin_id: req.session.admin.id,
       election_id: active.id,
