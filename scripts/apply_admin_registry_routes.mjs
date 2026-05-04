@@ -204,7 +204,7 @@ app.get("/admin/residentes", requireAdmin, async (req, res) => {
   const params = [];
   let where = "";
   if (search) {
-    params.push(`%${search.toLowerCase()}%`);
+    params.push("%" + search.toLowerCase() + "%");
     where = \`WHERE lower(rr.name) LIKE $1 OR lower(COALESCE(rr.dni,'')) LIKE $1 OR lower(COALESCE(rr.email,'')) LIKE $1 OR lower(COALESCE(rr.phone,'')) LIKE $1 OR lower(u.label) LIKE $1\`;
   }
 
@@ -212,7 +212,7 @@ app.get("/admin/residentes", requireAdmin, async (req, res) => {
     \`SELECT rr.*, u.label AS unit_label
      FROM resident_registry rr
      JOIN units u ON u.id=rr.unit_id
-     ${where}
+     \${where}
      ORDER BY u.label ASC, rr.name ASC
      LIMIT 500\`,
     params
