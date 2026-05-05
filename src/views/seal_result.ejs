@@ -1,13 +1,35 @@
-<h2>Elección sellada correctamente</h2>
+<%- include('layout', { title: "Campaña sellada", body: `
+  <div class="card">
+    <h2>Campaña sellada correctamente</h2>
+    <p><b>${election?.title || "Campaña"}</b></p>
 
-<h3>Directiva</h3>
-<p>Total votos: <%= council.totalVotes %></p>
-<p>Hash global:</p>
-<pre><%= council.globalHash %></pre>
+    ${referendum ? `
+      <h3>Votación interna / Referéndum</h3>
+      <p>Total votos: ${referendum.totalVotes}</p>
+      <p>Hash global:</p>
+      <pre style="white-space:pre-wrap; word-break:break-all">${referendum.globalHash}</pre>
+    ` : ``}
 
-<h3>Fiscales</h3>
-<p>Total votos: <%= fiscal.totalVotes %></p>
-<p>Hash global:</p>
-<pre><%= fiscal.globalHash %></pre>
+    ${council ? `
+      <h3>Directiva</h3>
+      <p>Total votos: ${council.totalVotes}</p>
+      <p>Hash global:</p>
+      <pre style="white-space:pre-wrap; word-break:break-all">${council.globalHash}</pre>
+    ` : ``}
 
-<p>Publica estos hashes inmediatamente en el grupo oficial.</p>
+    ${fiscal ? `
+      <h3>Fiscales</h3>
+      <p>Total votos: ${fiscal.totalVotes}</p>
+      <p>Hash global:</p>
+      <pre style="white-space:pre-wrap; word-break:break-all">${fiscal.globalHash}</pre>
+    ` : ``}
+
+    <p>Publica estos hashes inmediatamente en el grupo oficial.</p>
+
+    <div class="row" style="margin-top:12px">
+      <a href="/admin/acta.pdf?v=${Date.now()}" target="_blank" rel="noopener"><button>Acta PDF</button></a>
+      <a href="/admin/verify"><button>Verificar integridad</button></a>
+      <a href="/admin"><button>Volver al panel</button></a>
+    </div>
+  </div>
+` }) %>
