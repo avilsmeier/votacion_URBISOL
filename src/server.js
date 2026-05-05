@@ -17,6 +17,10 @@ import { createActaPdfHandler } from "./actaPdf.js";
 import { createAudit } from "./audit.js";
 const auditEvent = createAudit({ q });
 
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET_REQUIRED_PRODUCTION");
+}
+
 const app = express();
 app.set("view engine", "ejs");
 app.set("views", new URL("./views", import.meta.url).pathname);
@@ -780,6 +784,10 @@ app.get("/admin/election/edit", requireAdmin, async (req, res) => {
 app.post("/admin/election/edit", requireAdmin, async (req, res) => {
   const election = await getActiveElectionOrLatest();
   if (!election) return res.status(500).send("No hay campañas.");
+  if (await isElectionSealed(election.id)) {
+    await audit("ELECTION_EDIT_BLOCKED_SEALED", { actor_admin_id: req.session.admin.id, election_id: election.id });
+    return res.status(403).send("Esta campaña ya fue sellada y no puede editarse.");
+  }
 
   const { title, reg_open_at, reg_close_at, vote_open_at, vote_close_at, is_active } = req.body;
 
@@ -1175,63 +1183,6 @@ app.post("/votar/:token/referendum", async (req, res, next) => {
     c.release();
   }
 });
-app.post("/votar/:token/referendum", async (req, res) => {
-  const election = await getActiveElection();
-  if (!election) return res.render("no_active");
-  if (election.kind !== "VOTACION") return res.status(400).send("Esta campaña no es una votación interna.");
-
-  const n = now();
-  const voteOpen = inWindow(n, election.vote_open_at, election.vote_close_at);
-  if (!voteOpen) return res.render("closed", { election });
-
-  const option_id = Number(req.body.option_id);
-  if (!option_id) return res.status(400).send("Elige una opción.");
-
-  const { question, options } = await getReferendumForElection(election.id);
-  if (!question || !options.some(o => Number(o.id) === option_id)) return res.status(400).send("Opción inválida.");
-
-  const tokenHash = hashToken(req.params.token);
-  const c = await pool.connect();
-  try {
-    await c.query("BEGIN");
-    const t = await c.query(`SELECT * FROM vote_tokens WHERE token_hash=$1 AND election_id=$2 FOR UPDATE`, [tokenHash, election.id]);
-    if (!t.rows.length) { await c.query("ROLLBACK"); return res.status(404).send("Enlace inválido."); }
-    const vt = t.rows[0];
-    if (vt.status !== "ACTIVE") { await c.query("ROLLBACK"); return res.render("vote_used", { election }); }
-
-    await insertReferendumVoteChained(c, {
-      election_id: election.id,
-      unit_id: vt.unit_id,
-      question_id: question.id,
-      option_id,
-      token_id: vt.id,
-      ip: getReqIp(req),
-      user_agent: getUserAgent(req)
-    });
-
-    await c.query(`UPDATE vote_tokens SET status='USED', used_at=NOW() WHERE id=$1`, [vt.id]);
-    await c.query("COMMIT");
-
-    await audit("REFERENDUM_VOTE_CAST", { election_id: election.id, unit_id: vt.unit_id, token_id: vt.id, meta_json: { question_id: question.id, option_id }});
-    const regForReceipt = (await q(`SELECT r.id, r.email, u.label AS unit_label FROM registrations r JOIN units u ON u.id=r.unit_id WHERE r.id=$1`, [vt.registration_id])).rows[0];
-    await sendEmailNotification({
-      template: "vote_receipt",
-      recipient: regForReceipt?.email,
-      election_id: election.id,
-      registration_id: regForReceipt?.id,
-      meta_json: { token_id: vt.id, kind: "REFERENDUM" },
-      send: () => sendVoteReceipt({ to: regForReceipt.email, electionTitle: election.title, castAt: new Date().toLocaleString("es-PE", { timeZone: "America/Lima" }) })
-    });
-    return res.render("vote_done", { election });
-  } catch (e) {
-    await c.query("ROLLBACK");
-    if (String(e?.code) === "23505") return res.render("vote_used", { election });
-    console.error(e);
-    return res.status(500).send("Error registrando voto.");
-  } finally {
-    c.release();
-  }
-});
 
 /* =========================
    RESULTADOS PÚBLICOS (histórico)
@@ -1242,6 +1193,18 @@ app.get("/resultados", async (req, res) => {
   return res.redirect(`/resultados/${election.id}`);
 });
 
+// PUBLIC_RESULTS_UNTIL_CLOSE_GUARD
+app.get("/resultados/:electionId", async (req, res, next) => {
+  const electionId = Number(req.params.electionId);
+  if (!electionId) return next();
+  const election = (await q(`SELECT * FROM elections WHERE id=$1`, [electionId])).rows[0];
+  if (!election) return next();
+  const active = await getActiveElection();
+  if (active && Number(active.id) === electionId && now() < new Date(election.vote_close_at)) {
+    return res.render("results_pending", { election });
+  }
+  return next();
+});
 app.get("/resultados/:electionId", async (req, res) => {
   const electionId = Number(req.params.electionId);
   const election = (await q(`SELECT * FROM elections WHERE id=$1`, [electionId])).rows[0];
