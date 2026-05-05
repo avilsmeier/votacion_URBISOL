@@ -98,7 +98,7 @@
           <td>
             <a href="/resultados/${e.id}">Resultados</a> | <a href="/admin/fiscalizacion/${e.id}/votos">Fiscalización</a>
             ${admin.role==="admin" && !e.is_active ? `
-              ` | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}`
+              | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}
             ` : ``}
             ${admin.role==="admin" && e.is_active ? `
               | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/close"><button type="submit">Cerrar</button></form>
