@@ -1,385 +1,900 @@
-# 📘 README.md
+# Sistema de Votación Isla del Sol / URBISOL
 
-```markdown
-# 🗳 Sistema de Votación URBISOL 1.0
+Sistema web de votación digital para campañas internas de comunidades vecinales, urbanizaciones o condominios. Está diseñado para operar procesos simples de votación, referéndum interno y elecciones de representantes, con registro controlado, enlaces personales de uso único, auditoría, sellado criptográfico, actas PDF y verificación posterior.
 
-Sistema de votación digital para elecciones vecinales (urbanizaciones / condominios), diseñado para ser:
+El sistema prioriza:
 
-- Transparente
-- Auditable
-- De bajo costo
-- Fácil de usar para adultos mayores
-- Verificable criptográficamente
+- operación simple para vecinos y adultos mayores;
+- control manual por parte del Consejo Directivo;
+- trazabilidad completa;
+- bajo costo de infraestructura;
+- evidencias verificables después del cierre;
+- soporte para voto por unidad o propiedad habilitada.
 
-Incluye registro aprobado manualmente, token único por unidad, mini-blockchain por campaña, sello criptográfico de cierre y verificación independiente.
-
----
-
-# 🎯 Objetivo
-
-Permitir votación digital complementaria a urna física, asegurando:
-
-- 1 voto por unidad
-- Token único de uso único
-- Registro aprobado por el Comité Electoral
-- Resultados auditables
-- Imposibilidad práctica de manipulación posterior
-
-Este sistema está pensado para comunidades pequeñas (100–300 familias).
+> Este sistema no está pensado para elecciones estatales oficiales. Es una herramienta privada para procesos internos comunitarios.
 
 ---
 
-# 🧱 Arquitectura Técnica
-
-## Stack
-
-- Node.js 24
-- Express
-- PostgreSQL
-- EJS
-- PDFKit
-- Crypto (SHA256)
-- Nginx + Cloudflare (opcional)
-
----
-
-# 🔐 Modelo de Seguridad
-
-## 1️⃣ Registro
-
-Cada vecino se registra con:
-
-- Dirección (normalizada)
-- DNI / CE
-- Email obligatorio
-- Teléfono
-
-Estado inicial: `PENDING`.
-
-El Comité Electoral aprueba manualmente.
-
-Solo registros aprobados pueden votar.
-
----
-
-## 2️⃣ Token de Votación
-
-Al aprobar:
-
-- Se genera token único
-- Se guarda hash del token en DB
-- Se envía enlace por email
-- Se registra evento en auditoría
-
-El token:
-
-- Es de uso único
-- Está ligado a una unidad
-- Se bloquea tras completar ambos votos
-
----
-
-## 3️⃣ Votación en 2 pasos
-
-1. Voto Directiva
-2. Voto Fiscales
-
-Ambos se registran dentro del mismo flujo con el mismo token.
-
----
-
-## 4️⃣ Mini-Blockchain por Campaña
-
-Cada voto contiene:
-
-- `chain_position`
-- `previous_hash`
-- `vote_hash`
-
-El hash se calcula como:
-
-```
-
-SHA256(JSON(payload))
-
-```
-
-Donde el payload incluye:
-
-- election_id
-- unit_id
-- candidate_id o fiscal_list_id
-- token_id
-- cast_at
-- previous_hash
-- chain_position
-
-Cada voto referencia criptográficamente al anterior.
-
-Si alguien modifica un voto:
-→ Se rompe la cadena  
-→ Falla la verificación  
-
----
-
-## 5️⃣ Sello Criptográfico
-
-Al cerrar la elección:
-
-1. Se concatenan todos los `vote_hash` en orden.
-2. Se calcula:
-
-```
-
-global_hash = SHA256(concatenación)
-
-```
-
-3. Se guarda en `election_seals`
-4. Se publica en el Acta PDF
-
-Después del sellado:
-Cualquier modificación es detectable matemáticamente.
-
----
-
-# 🔎 Verificación
-
-Existen dos métodos:
-
-## 🔹 Web
-
-Panel Admin → Verificar Integridad
-
-Permite:
-
-- Verificar contra sello guardado
-- Pegar hash manual del acta (verificación histórica)
-
----
-
-## 🔹 CLI independiente
-
-```
-
-node scripts/verify_chain.mjs <election_id>
-
-```
-
-Recalcula:
-
-- Encadenamiento completo
-- Hash de cada bloque
-- Hash global
-
-Si algo fue modificado:
-→ Error
-
----
-
-# 📊 Auditoría
-
-Tabla `audit_log` registra:
-
-- Registro creado
-- Registro aprobado
-- Token generado
-- Token enviado
-- Voto emitido
-- PDF generado
-- Sello generado
-- Verificación ejecutada
-
-Cada evento incluye:
-
-- actor_admin_id
-- election_id
-- meta_json
-- timestamp
-
-Auditoría exportable por campaña.
-
----
-
-# 👤 Guía Rápida – Usuario
-
-1. Recibe email con enlace único.
-2. Ingresa.
-3. Vota Directiva.
-4. Vota Fiscales.
-5. Fin.
-
-No puede votar dos veces.
-El enlace queda inutilizable.
-
----
-
-# 🧑‍⚖️ Guía Rápida – Comité Electoral
-
-## Antes de votar
-
-1. Crear campaña.
-2. Cargar listas y planes PDF.
-3. Abrir registro.
-4. Aprobar solicitudes.
-5. Verificar envío de tokens.
-
----
-
-## Durante votación
-
-- Monitorear participación.
-- Exportar padrón si necesario.
-
----
-
-## Al cerrar
-
-1. Cerrar votación.
-2. Presionar "Cerrar y Sellar".
-3. Descargar Acta PDF.
-4. Publicar hash global en grupo oficial.
-5. (Opcional) Ejecutar verify_chain desde CLI.
-
----
-
-# 📄 PDFs
-
-## Padrón
-
-- Solo registros aprobados
-- Sin datos sensibles innecesarios
-
-## Acta
+## Estado funcional actual
 
 Incluye:
 
-- Resultados
-- Métricas
-- Hash global
-- Espacios de firma
-- Sello digital del sistema
+- campañas de tipo `VOTACION` para consultas internas o referéndums;
+- campañas de tipo elección de directiva/fiscales;
+- registro público de vecinos;
+- aprobación manual de solicitudes;
+- aprobación individual y aprobación en bloque;
+- enlace personal de votación por correo;
+- reemisión individual de enlace cuando un vecino perdió el correo;
+- recordatorio masivo simple a aprobados que aún no votaron, sin incluir enlace;
+- voto único por unidad o propiedad;
+- soporte para un mismo residente con más de una propiedad;
+- hash individual por voto;
+- cadena criptográfica por campaña;
+- recibo de voto individual con opción, hash, código de verificación y enlace de validación;
+- verificación pública del voto con código de verificación + DNI/CE o correo;
+- rol `admin`, rol `fiscal` y rol `viewer`;
+- fiscalización de votos individuales por admin/fiscal;
+- sellado criptográfico de campaña;
+- acta PDF y padrón PDF;
+- publicación de resultados sellados;
+- bloqueo de edición después del sellado;
+- histórico de campañas cerradas;
+- auditoría y log de notificaciones.
 
 ---
 
-# ⚙️ Instalación
+## Modelo operativo
 
+### Regla principal de voto
+
+El sistema trabaja bajo esta regla:
+
+```text
+1 unidad o propiedad habilitada = 1 voto
 ```
 
-git clone [https://github.com/avilsmeier/votacion_URBISOL.git](https://github.com/avilsmeier/votacion_URBISOL.git)
+No usa la regla `1 DNI = 1 voto`.
+
+Esto significa que una misma persona puede registrarse más de una vez si representa más de una propiedad. Cada registro corresponde a una unidad distinta, cada unidad recibe su propio enlace y cada enlace permite emitir un solo voto para esa unidad.
+
+Ejemplo:
+
+```text
+Juan Pérez
+DNI 12345678
+Unidad A-101
+Unidad B-204
+```
+
+Puede tener:
+
+```text
+2 solicitudes
+2 aprobaciones
+2 enlaces personales
+2 votos, uno por cada propiedad
+```
+
+El sistema debe impedir más de un voto para la misma unidad.
+
+---
+
+## Tipos de campaña
+
+### VOTACION
+
+Para referéndums, consultas internas o decisiones simples.
+
+Ejemplo:
+
+```text
+¿Debe actualizarse la cuota mensual?
+A. S/ 230
+B. S/ 250
+```
+
+Este es el modo recomendado para votaciones internas simples.
+
+### Elección de Directiva/Fiscales
+
+Flujo de elección con listas de Consejo Directivo y lista de fiscales. Mantiene compatibilidad con el modelo original de elección en dos pasos.
+
+---
+
+## Roles
+
+### admin
+
+Puede:
+
+- crear campañas;
+- editar campañas no selladas;
+- configurar votaciones;
+- aprobar/rechazar solicitudes;
+- aprobar solicitudes en bloque;
+- reemitir enlaces;
+- enviar recordatorios;
+- gestionar usuarios;
+- gestionar padrón maestro;
+- ver resultados;
+- fiscalizar votos individuales;
+- generar PDFs;
+- sellar campañas;
+- cerrar/desactivar campañas.
+
+### fiscal
+
+Puede consultar y fiscalizar, pero no modificar.
+
+Puede ver:
+
+- resultados;
+- actas;
+- sellos;
+- detalle de votos individuales;
+- export CSV de fiscalización.
+
+No puede aprobar, editar campaña, crear usuarios ni sellar.
+
+### viewer
+
+Rol de solo consulta general. Puede acceder a resultados y vistas permitidas, sin acciones administrativas sensibles.
+
+---
+
+## Flujo completo del proceso
+
+### 1. Crear campaña
+
+Desde el panel administrativo:
+
+```text
+/admin
+Campañas -> Crear nueva campaña
+```
+
+Completar:
+
+- título;
+- tipo de campaña;
+- ventana de registro;
+- ventana de votación.
+
+Solo debe haber una campaña activa a la vez.
+
+### 2. Configurar votación
+
+Para tipo `VOTACION`, configurar:
+
+- pregunta;
+- opciones;
+- orden de opciones.
+
+Para tipo elección, configurar listas de directiva y fiscales.
+
+### 3. Registro de vecinos
+
+El vecino ingresa al formulario de registro público:
+
+```text
+/registro
+```
+
+Debe completar:
+
+- calle;
+- número;
+- piso/depto si corresponde;
+- nombre y apellidos;
+- DNI/CE;
+- teléfono;
+- correo electrónico.
+
+El correo es obligatorio porque el sistema envía enlaces y notificaciones por email.
+
+Al terminar, el sistema muestra una pantalla indicando que revise su correo, Spam, Correo no deseado o Promociones, y que agregue el remitente a contactos o remitentes seguros.
+
+### 4. Revisión del Consejo Directivo
+
+La solicitud queda en estado:
+
+```text
+PENDING
+```
+
+El Consejo Directivo revisa por fuera del sistema si la unidad/persona está habilitada:
+
+- pago al día;
+- ausencia de sanción;
+- representación válida;
+- datos correctos.
+
+El sistema no decide automáticamente si el vecino está habilitado. Esa decisión es administrativa.
+
+### 5. Aprobación
+
+Al aprobar una solicitud, el sistema hace todo junto:
+
+- cambia la solicitud a `APPROVED`;
+- genera un token secreto;
+- guarda solo el hash del token;
+- envía el enlace personal por email;
+- muestra el enlace en pantalla para respaldo manual;
+- registra auditoría;
+- registra notificación.
+
+No existe selector manual de “copiar” o “email”. La aprobación siempre intenta enviar por email y además muestra el link.
+
+### 6. Aprobación en bloque
+
+Desde la lista de solicitudes pendientes se pueden seleccionar varias solicitudes y aprobarlas en bloque.
+
+El sistema:
+
+- aprueba las seleccionadas;
+- genera un enlace por cada solicitud;
+- envía los correos;
+- muestra resumen de aprobadas/enviadas/fallidas/omitidas;
+- audita la operación.
+
+Recomendación: probar primero con una solicitud y luego con grupos pequeños, especialmente si el proveedor SMTP tiene límites por hora.
+
+### 7. Reemisión individual de enlace
+
+Si un vecino no encuentra el correo o perdió el enlace, el admin puede usar:
+
+```text
+Reemitir enlace
+```
+
+La reemisión:
+
+- solo funciona si la campaña no está sellada;
+- solo funciona si la solicitud está aprobada;
+- solo funciona si la unidad todavía no votó;
+- revoca enlaces activos anteriores;
+- genera un token nuevo;
+- envía un nuevo correo;
+- audita `TOKEN_REISSUED`.
+
+No se recupera el enlace anterior porque el sistema no guarda el token en texto plano. Esto es intencional por seguridad.
+
+### 8. Recordatorio a pendientes
+
+Existe una pantalla:
+
+```text
+/admin/recordatorios-voto
+```
+
+Muestra:
+
+- aprobados;
+- ya votaron;
+- pendientes;
+- lista de pendientes.
+
+Permite enviar recordatorio masivo simple a quienes todavía no votaron.
+
+Importante:
+
+- el recordatorio no incluye enlace de votación;
+- no toca tokens;
+- no reemplaza ni reemite enlaces;
+- solo avisa que el vecino tiene una votación pendiente.
+
+Esto reduce riesgo de exponer enlaces y ayuda a manejar límites de envío del proveedor SMTP.
+
+### 9. Votación
+
+Cada vecino abre su enlace personal.
+
+Antes del inicio de votación:
+
+- el sistema reconoce que el enlace es válido;
+- no muestra opciones;
+- informa fecha/hora de inicio;
+- muestra contador regresivo.
+
+Durante la ventana de votación:
+
+- muestra opciones;
+- permite seleccionar y confirmar;
+- registra el voto;
+- marca el token como usado;
+- genera recibo de voto;
+- envía correo de confirmación.
+
+Después de la ventana:
+
+- no permite votar.
+
+Si el enlace ya fue usado:
+
+- informa que el enlace ya fue usado;
+- sugiere validar el voto;
+- indica contactar al Consejo Directivo si corresponde.
+
+### 10. Recibo individual de voto
+
+Al votar, el vecino recibe un correo con:
+
+- campaña;
+- unidad/propiedad;
+- fecha/hora;
+- opción registrada;
+- código de verificación;
+- enlace para validar voto;
+- hash del voto;
+- posición en cadena.
+
+Este recibo no permite votar otra vez ni modificar el voto. Solo permite consultar el voto registrado.
+
+### 11. Validación pública del voto
+
+Ruta pública:
+
+```text
+/verificar-voto
+```
+
+El vecino ingresa:
+
+- código de verificación;
+- DNI/CE o correo.
+
+El sistema muestra:
+
+- campaña;
+- unidad;
+- representante;
+- fecha/hora;
+- opción registrada;
+- posición en cadena;
+- hash del voto.
+
+Funciona aunque la campaña ya esté cerrada o inactiva.
+
+### 12. Fiscalización
+
+Ruta:
+
+```text
+/admin/fiscalizacion
+```
+
+Disponible para admin y fiscal.
+
+Permite ver campañas, sellos y detalle de votos individuales.
+
+Detalle:
+
+```text
+/admin/fiscalizacion/:electionId/votos
+/admin/fiscalizacion/:electionId/votos.csv
+```
+
+Incluye:
+
+- unidad;
+- representante;
+- DNI/CE;
+- email;
+- opción votada;
+- fecha/hora;
+- posición en cadena;
+- hash del voto.
+
+Este sistema es trazable por diseño. No es voto secreto.
+
+### 13. Resultados
+
+Los resultados públicos no se muestran durante la votación activa. Se publican al cierre para evitar influir el voto.
+
+Si no hay campaña activa, el home muestra la última campaña cerrada y permite consultar resultados históricos.
+
+### 14. Sellado
+
+Al finalizar la votación, el admin usa:
+
+```text
+Cerrar y Sellar Campaña
+```
+
+El sellado:
+
+- calcula hash global por campaña/tipo de voto;
+- guarda el sello en `election_seals`;
+- publica el hash en el acta;
+- bloquea nuevas votaciones y ediciones de campaña;
+- permite verificación posterior.
+
+Una campaña sellada no debe reactivarse. Los resultados quedan consultables en histórico.
+
+### 15. Notificación de resultados sellados
+
+Después del sellado se puede enviar un correo a los aprobados con:
+
+- resumen de resultados;
+- enlace a resultados publicados;
+- sello/hash de integridad.
+
+### 16. PDFs
+
+Desde el panel se generan:
+
+- Padrón PDF;
+- Acta PDF.
+
+Ambos abren en una pestaña nueva desde el panel administrativo.
+
+El acta incluye:
+
+- campaña;
+- tipo de campaña;
+- pregunta si aplica;
+- resultados;
+- métricas;
+- sellos de integridad;
+- espacio de firmas.
+
+Para votación interna, las firmas sugeridas son:
+
+- Presidente;
+- Vicepresidente;
+- Secretario;
+- Tesorero opcional;
+- Fiscal.
+
+---
+
+## Modelo criptográfico
+
+### Hash individual del voto
+
+Cada voto registra:
+
+- `chain_position`;
+- `previous_hash`;
+- `vote_hash`.
+
+El `vote_hash` se calcula con SHA-256 sobre un payload que incluye datos esenciales del voto:
+
+- campaña;
+- unidad;
+- opción/lista;
+- token;
+- fecha/hora de registro;
+- hash anterior;
+- posición en cadena.
+
+### Cadena por campaña
+
+Cada nuevo voto referencia el hash del voto anterior. El primer voto usa:
+
+```text
+GENESIS
+```
+
+Si se modifica un voto anterior, se rompe la cadena.
+
+### Sello global
+
+Al sellar, se concatenan los `vote_hash` en orden y se calcula:
+
+```text
+global_hash = SHA256(concatenacion_de_vote_hashes)
+```
+
+Ese hash queda guardado y publicado en el acta.
+
+### Verificación
+
+La verificación recalcula la cadena y compara con el sello guardado o con un hash ingresado manualmente desde el acta.
+
+---
+
+## Auditoría y notificaciones
+
+### audit_log
+
+Registra eventos como:
+
+- registro creado;
+- solicitud aprobada;
+- aprobación en bloque;
+- token reemitido;
+- voto emitido;
+- validación de voto;
+- fiscalización vista/exportada;
+- acta generada;
+- campaña sellada;
+- resultados notificados;
+- usuario administrativo creado/editado/eliminado.
+
+Cada evento puede incluir:
+
+- admin actor;
+- campaña;
+- unidad;
+- solicitud;
+- token;
+- metadata JSON;
+- timestamp.
+
+### notification_log
+
+Registra correos enviados, omitidos o fallidos.
+
+Incluye:
+
+- canal;
+- template;
+- destinatario;
+- estado;
+- error si hubo;
+- metadata;
+- timestamp.
+
+---
+
+## Correos del sistema
+
+Los correos son texto plano para maximizar entregabilidad y evitar problemas con clientes como Hotmail/Outlook.
+
+Tipos principales:
+
+- solicitud recibida;
+- solicitud aprobada con enlace;
+- solicitud rechazada;
+- recordatorio de voto pendiente;
+- recibo de voto;
+- resultados sellados;
+- invitación a admin/fiscal/viewer.
+
+Todos los correos al vecino deben ser claros, con frases cortas y contexto de unidad/propiedad cuando corresponde.
+
+---
+
+## Variables de entorno
+
+Ejemplo de `.env`:
+
+```env
+NODE_ENV=production
+PORT=3000
+BASE_URL=https://isladelsol.org
+DATABASE_URL=postgres://usuario:clave@localhost:5432/votacion
+SESSION_SECRET=poner_una_clave_larga_y_unica
+
+SYSTEM_NAME=Sistema de Votación Isla del Sol
+SUPPORT_EMAIL=Consejo Directivo <votacion@isladelsol.org>
+
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=usuario_smtp
+SMTP_PASS=clave_smtp
+SMTP_FROM=Consejo Directivo Isla del Sol <votacion@isladelsol.org>
+```
+
+Importante: usar `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`.
+
+---
+
+## Instalación local
+
+```bash
+git clone https://github.com/avilsmeier/votacion_URBISOL.git
 cd votacion_URBISOL
 npm install
-
 ```
 
-Crear archivo `.env` basado en `.env.sample`:
+Crear `.env` y configurar PostgreSQL.
 
-```
+Ejecutar migraciones/base SQL según corresponda al entorno.
 
-DATABASE_URL=postgres://user:pass@localhost:5432/votacion
-SESSION_SECRET=clave_larga_segura
-MAIL_HOST=smtp...
-MAIL_USER=...
-MAIL_PASS=...
-MAIL_FROM=...
+Levantar:
 
-```
-
-Migrar base de datos.
-
-Ejecutar:
-
-```
-
+```bash
 node src/server.js
-
 ```
 
-Producción recomendada con:
+Por defecto escucha en:
 
-```
-
-pm2 start src/server.js --name votacion
-
+```text
+:3000
 ```
 
 ---
 
-# 🧪 Verificación Técnica
+## Producción con systemd
 
-Para verificar una campaña:
+Servicio recomendado:
 
+```ini
+[Unit]
+Description=Sistema Votacion Isla del Sol
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+WorkingDirectory=/home/autoagent/votaciones
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+User=autoagent
+EnvironmentFile=/home/autoagent/votaciones/.env
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-node scripts/verify_chain.mjs 1
+Comandos útiles:
 
-```
-
-Salida esperada:
-
-```
-
-✔ Cadena íntegra
-✔ Hash global coincide
-
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable votacion
+sudo systemctl restart votacion
+sudo systemctl status votacion --no-pager
+journalctl -u votacion -n 100 --no-pager
 ```
 
 ---
 
-# 🔒 Consideraciones de Seguridad
+## Despliegue después de cambios
 
-- Tokens hasheados en DB
-- Rate limiting activo
-- Sesiones seguras detrás de proxy
-- Advisory locks en votos
-- Sello criptográfico inmutable
-- Auditoría completa
-- Cache deshabilitado en PDFs administrativos
-
----
-
-# 🧠 Limitaciones
-
-- El voto no es anónimo (es nominal por diseño).
-- No es sistema electoral estatal.
-- Depende de integridad del servidor.
-- No incluye cifrado homomórfico.
-
----
-
-# 🚀 Futuras Mejoras
-
-- Campo `is_sealed` obligatorio
-- Bloqueo total tras sellado
-- Export auditoría CSV
-- Referéndums / preguntas múltiples
-- Dockerfile
-- Firma digital del hash
-- Endpoint público read-only
-
----
-
-# 🏁 Estado del Proyecto
-
-Versión 1.0
-
-Incluye:
-
-✔ Registro controlado  
-✔ Token único  
-✔ Voto encadenado  
-✔ Sello criptográfico  
-✔ Verificación reproducible  
-✔ Auditoría trazable  
-✔ Acta PDF  
-✔ Repo versionado  
-
-Sistema apto para elecciones vecinales privadas.
-
----
-
-# 📜 Licencia
-
-Uso privado para comunidades vecinales.
-Sin garantía para procesos electorales oficiales estatales.
+```bash
+cd /home/autoagent/votaciones
+git pull --rebase origin main
+node --check src/server.js
+node --check src/mailer.js
+node --check src/actaPdf.js
+sudo systemctl restart votacion
 ```
+
+Si hay scripts de patch pendientes:
+
+```bash
+node scripts/nombre_del_script.mjs
+node --check src/server.js
+sudo systemctl restart votacion
+```
+
+Luego versionar cambios locales generados por scripts:
+
+```bash
+git add src/server.js src/views/*.ejs
+git commit -m "Describe production patch"
+git push
+```
+
+---
+
+## Migraciones importantes
+
+### Rol fiscal y recibos de voto
+
+```bash
+sudo -u postgres psql -d votacion -v ON_ERROR_STOP=1 -f migrations/20260504_fiscal_role_vote_receipts.sql
+```
+
+### Admins y padrón maestro
+
+```bash
+sudo -u postgres psql -d votacion -v ON_ERROR_STOP=1 -f migrations/20260504_admins_and_resident_registry.sql
+```
+
+### Permitir DNI/email duplicados entre propiedades
+
+```bash
+sudo -u postgres psql -d votacion -v ON_ERROR_STOP=1 -f migrations/20260504_allow_resident_duplicate_contacts.sql
+```
+
+Esta migración es importante porque un mismo residente puede tener más de una propiedad.
+
+---
+
+## Verificaciones técnicas rápidas
+
+### Sintaxis Node
+
+```bash
+node --check src/server.js
+node --check src/mailer.js
+node --check src/actaPdf.js
+```
+
+### Estado del servicio
+
+```bash
+sudo systemctl status votacion --no-pager
+journalctl -u votacion -n 100 --no-pager
+```
+
+### Últimas notificaciones
+
+```sql
+SELECT template, recipient, status, error, created_at
+FROM notification_log
+ORDER BY id DESC
+LIMIT 20;
+```
+
+### Últimos eventos de auditoría
+
+```sql
+SELECT event, actor_admin_id, registration_id, token_id, meta_json, created_at
+FROM audit_log
+ORDER BY id DESC
+LIMIT 20;
+```
+
+### Recibos de voto
+
+```sql
+SELECT id, election_id, registration_id, vote_kind, vote_table, vote_id, substr(vote_hash,1,16) AS hash_prefix, created_at
+FROM vote_receipts
+ORDER BY id DESC
+LIMIT 10;
+```
+
+---
+
+## Checklist de prueba punta a punta
+
+Antes de abrir producción real, probar con 2 o 3 usuarios internos:
+
+1. Crear campaña `VOTACION`.
+2. Configurar pregunta y opciones.
+3. Abrir ventana de registro.
+4. Registrar usuario 1.
+5. Registrar usuario 2 con otra unidad.
+6. Registrar mismo DNI en otra propiedad y confirmar que no rompe.
+7. Aprobar individualmente una solicitud.
+8. Aprobar en bloque otra solicitud.
+9. Confirmar correos recibidos.
+10. Abrir enlace antes de la votación y verificar contador.
+11. Abrir enlace durante votación y votar.
+12. Confirmar recibo de voto con opción, hash y código.
+13. Validar voto en `/verificar-voto`.
+14. Reemitir enlace a una solicitud pendiente de voto y confirmar que el link viejo no funciona.
+15. Enviar recordatorio simple a pendientes.
+16. Revisar fiscalización.
+17. Cerrar ventana de votación.
+18. Sellar campaña.
+19. Descargar acta PDF.
+20. Verificar integridad.
+21. Notificar resultados sellados.
+22. Desactivar/cerrar campaña.
+23. Confirmar que el home muestra resultados históricos.
+
+---
+
+## Reglas después del sellado
+
+Una campaña sellada:
+
+- no permite nuevos votos;
+- no permite aprobar solicitudes;
+- no permite reemitir enlaces;
+- no permite editar la campaña;
+- no debe poder reactivarse;
+- sí permite consultar resultados;
+- sí permite descargar acta;
+- sí permite verificar integridad;
+- sí permite gestionar admins/fiscales/viewers;
+- sí permite gestionar padrón maestro;
+- sí permite crear una nueva campaña.
+
+---
+
+## Seguridad y limitaciones
+
+### Seguridad aplicada
+
+- tokens hasheados en DB;
+- tokens no recuperables en texto plano;
+- rate limiting básico;
+- sesiones HTTP only;
+- soporte para proxy;
+- advisory locks para serializar votos;
+- hash encadenado por voto;
+- sello global por campaña;
+- auditoría;
+- logs de notificación;
+- bloqueo post-sellado;
+- cache deshabilitado en PDFs administrativos.
+
+### Limitaciones conocidas
+
+- no es voto secreto;
+- no es sistema electoral estatal;
+- depende de la integridad del servidor y base de datos;
+- no usa cifrado homomórfico;
+- no usa firma digital certificada del acta;
+- `MemoryStore` de sesiones no es ideal para producción prolongada;
+- el envío masivo depende del proveedor SMTP y sus límites.
+
+---
+
+## Proveedores de correo
+
+El sistema usa SMTP estándar.
+
+Para pruebas se puede usar Gmail u otro SMTP, pero para producción conviene un proveedor transaccional.
+
+Consideraciones:
+
+- configurar SPF;
+- configurar DKIM;
+- configurar DMARC;
+- usar remitente del dominio oficial;
+- monitorear rebotes;
+- evitar HTML pesado;
+- evitar envíos masivos sin control si el proveedor limita correos por hora.
+
+Los correos son texto plano para mejorar entregabilidad.
+
+---
+
+## Futuras mejoras recomendadas
+
+- cola de correos con rate limit;
+- panel de progreso de envíos;
+- reintento de notificaciones fallidas;
+- export completo de auditoría;
+- limpieza de scripts históricos de patch;
+- almacenamiento de sesiones en PostgreSQL o Redis;
+- Dockerfile;
+- CI básico con `node --check`;
+- backups automáticos de PostgreSQL;
+- firma digital externa del acta PDF;
+- soporte para múltiples preguntas por campaña;
+- modo observador público read-only.
+
+---
+
+## Guía breve para el vecino
+
+1. Registrarse con su unidad y datos.
+2. Revisar correo y Spam/Correo no deseado.
+3. Esperar aprobación del Consejo Directivo.
+4. Recibir enlace personal de votación.
+5. Abrir el enlace durante la ventana de votación.
+6. Elegir una opción.
+7. Confirmar voto.
+8. Guardar el recibo recibido por correo.
+9. Validar el voto en `/verificar-voto` si lo desea.
+
+Si representa más de una propiedad, debe registrar cada unidad por separado.
+
+---
+
+## Guía breve para el Consejo Directivo
+
+1. Crear campaña.
+2. Configurar pregunta/opciones.
+3. Abrir registro.
+4. Revisar solicitudes.
+5. Aprobar individual o en bloque.
+6. Verificar emails enviados.
+7. Reemitir enlaces puntuales si algún vecino los pierde.
+8. Enviar recordatorios simples si hace falta.
+9. Monitorear participación.
+10. Cerrar votación.
+11. Sellar campaña.
+12. Descargar acta.
+13. Verificar integridad.
+14. Notificar resultados sellados.
+15. Cerrar/desactivar campaña.
+
+---
+
+## Licencia y uso
+
+Uso privado para comunidades vecinales y procesos internos. Sin garantía para procesos electorales oficiales estatales.
