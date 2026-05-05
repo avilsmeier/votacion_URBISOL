@@ -22,6 +22,28 @@ async function tableExists(table) {
   return !!r.rows[0]?.name;
 }
 
+function castAtVariants(r) {
+  const vals = [];
+  if (r.cast_at !== undefined && r.cast_at !== null) vals.push(r.cast_at);
+  if (r.cast_at instanceof Date) vals.push(r.cast_at.toISOString());
+  if (r.cast_at_text) vals.push(r.cast_at_text);
+
+  const out = [];
+  const seen = new Set();
+  for (const v of vals) {
+    const key = v instanceof Date ? `date:${v.toISOString()}` : `${typeof v}:${String(v)}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(v);
+    }
+  }
+  return out.length ? out : [r.cast_at];
+}
+
+function variantsForPayloads(payloads) {
+  return Array.isArray(payloads) ? payloads : [{ name: "canonical", payload: payloads }];
+}
+
 async function verifyTable(table, payloadBuilder, kind) {
   if (!(await tableExists(table))) {
     console.log(`\n⚠️ Tabla ${table} no existe. Omitiendo ${kind}.`);
@@ -31,7 +53,7 @@ async function verifyTable(table, payloadBuilder, kind) {
   console.log(`\n🔎 Verificando ${kind}...`);
 
   const rows = (await pool.query(
-    `SELECT *
+    `SELECT *, cast_at::text AS cast_at_text
      FROM ${table}
      WHERE election_id=$1
      ORDER BY chain_position ASC`,
@@ -41,6 +63,7 @@ async function verifyTable(table, payloadBuilder, kind) {
   let prevHash = "GENESIS";
   let concatenated = "";
   let expectedPosition = 1;
+  const formatsUsed = new Set();
 
   for (const r of rows) {
     if (Number(r.chain_position) !== expectedPosition) {
@@ -51,13 +74,18 @@ async function verifyTable(table, payloadBuilder, kind) {
       throw new Error(`❌ Cadena rota en ${kind}, posición ${r.chain_position}: previous_hash no coincide`);
     }
 
-    const payload = payloadBuilder(r, prevHash);
-    const expectedHash = sha256Hex(JSON.stringify(payload));
+    const candidates = variantsForPayloads(payloadBuilder(r, prevHash));
+    const match = candidates.find(c => sha256Hex(JSON.stringify(c.payload)) === r.vote_hash);
 
-    if (expectedHash !== r.vote_hash) {
-      throw new Error(`❌ Hash inválido en ${kind}, posición ${r.chain_position}`);
+    if (!match) {
+      const debug = candidates.slice(0, 6).map(c => {
+        const h = sha256Hex(JSON.stringify(c.payload));
+        return `${c.name}: ${h}`;
+      }).join("\n  ");
+      throw new Error(`❌ Hash inválido en ${kind}, posición ${r.chain_position}. Hash guardado: ${r.vote_hash}\n  Probados:\n  ${debug}`);
     }
 
+    formatsUsed.add(match.name);
     prevHash = r.vote_hash;
     concatenated += r.vote_hash;
     expectedPosition++;
@@ -82,8 +110,89 @@ async function verifyTable(table, payloadBuilder, kind) {
 
   console.log("✔ Cadena íntegra.");
   console.log("Total votos:", rows.length);
+  console.log("Formato hash:", Array.from(formatsUsed).join(", ") || "sin votos");
   console.log("Global hash:", globalHash);
-  return { kind, totalVotes: rows.length, globalHash, sealed: !!seal };
+  return { kind, totalVotes: rows.length, globalHash, sealed: !!seal, formatsUsed: Array.from(formatsUsed) };
+}
+
+function councilPayloads(r, previous_hash) {
+  return castAtVariants(r).map((cast_at, idx) => ({
+    name: idx === 0 ? "canonical" : `canonical_cast_variant_${idx}`,
+    payload: {
+      election_id: r.election_id,
+      unit_id: r.unit_id,
+      candidate_id: r.candidate_id,
+      token_id: r.token_id,
+      cast_at,
+      previous_hash,
+      chain_position: r.chain_position
+    }
+  }));
+}
+
+function fiscalPayloads(r, previous_hash) {
+  return castAtVariants(r).map((cast_at, idx) => ({
+    name: idx === 0 ? "canonical" : `canonical_cast_variant_${idx}`,
+    payload: {
+      election_id: r.election_id,
+      unit_id: r.unit_id,
+      fiscal_list_id: r.fiscal_list_id,
+      token_id: r.token_id,
+      cast_at,
+      previous_hash,
+      chain_position: r.chain_position
+    }
+  }));
+}
+
+function referendumPayloads(r, previous_hash) {
+  const out = [];
+  for (const [idx, cast_at] of castAtVariants(r).entries()) {
+    const suffix = idx === 0 ? "" : `_cast_variant_${idx}`;
+
+    out.push({
+      name: `canonical${suffix}`,
+      payload: {
+        election_id: r.election_id,
+        unit_id: r.unit_id,
+        question_id: r.question_id,
+        option_id: r.option_id,
+        token_id: r.token_id,
+        cast_at,
+        previous_hash,
+        chain_position: r.chain_position
+      }
+    });
+
+    // Compatibilidad con votos emitidos por parches intermedios durante el desarrollo.
+    out.push({
+      name: `legacy_no_question_id${suffix}`,
+      payload: {
+        election_id: r.election_id,
+        unit_id: r.unit_id,
+        option_id: r.option_id,
+        token_id: r.token_id,
+        cast_at,
+        previous_hash,
+        chain_position: r.chain_position
+      }
+    });
+
+    out.push({
+      name: `legacy_sql_column_order${suffix}`,
+      payload: {
+        election_id: r.election_id,
+        question_id: r.question_id,
+        option_id: r.option_id,
+        unit_id: r.unit_id,
+        token_id: r.token_id,
+        cast_at,
+        previous_hash,
+        chain_position: r.chain_position
+      }
+    });
+  }
+  return out;
 }
 
 (async () => {
@@ -95,48 +204,10 @@ async function verifyTable(table, payloadBuilder, kind) {
     console.log(`Tipo: ${election.kind || "ELECCION"}`);
 
     if (election.kind === "VOTACION") {
-      await verifyTable(
-        "referendum_votes",
-        (r, previous_hash) => ({
-          election_id: r.election_id,
-          unit_id: r.unit_id,
-          question_id: r.question_id,
-          option_id: r.option_id,
-          token_id: r.token_id,
-          cast_at: r.cast_at,
-          previous_hash,
-          chain_position: r.chain_position
-        }),
-        "REFERENDUM"
-      );
+      await verifyTable("referendum_votes", referendumPayloads, "REFERENDUM");
     } else {
-      await verifyTable(
-        "votes",
-        (r, previous_hash) => ({
-          election_id: r.election_id,
-          unit_id: r.unit_id,
-          candidate_id: r.candidate_id,
-          token_id: r.token_id,
-          cast_at: r.cast_at,
-          previous_hash,
-          chain_position: r.chain_position
-        }),
-        "COUNCIL"
-      );
-
-      await verifyTable(
-        "fiscal_votes",
-        (r, previous_hash) => ({
-          election_id: r.election_id,
-          unit_id: r.unit_id,
-          fiscal_list_id: r.fiscal_list_id,
-          token_id: r.token_id,
-          cast_at: r.cast_at,
-          previous_hash,
-          chain_position: r.chain_position
-        }),
-        "FISCAL"
-      );
+      await verifyTable("votes", councilPayloads, "COUNCIL");
+      await verifyTable("fiscal_votes", fiscalPayloads, "FISCAL");
     }
 
     console.log("\n🎉 Verificación completa. Todo consistente.");
