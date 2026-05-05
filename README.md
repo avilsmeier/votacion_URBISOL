@@ -121,7 +121,8 @@ Puede:
 - fiscalizar votos individuales;
 - generar PDFs;
 - sellar campañas;
-- cerrar/desactivar campañas.
+- cerrar/desactivar campañas;
+- activar campañas selladas en modo consulta para revisar resultados, fiscalización, acta y verificación, sin habilitar edición ni votos.
 
 ### fiscal
 
@@ -410,7 +411,7 @@ El sellado:
 - bloquea nuevas votaciones y ediciones de campaña;
 - permite verificación posterior.
 
-Una campaña sellada no debe reactivarse. Los resultados quedan consultables en histórico.
+Una campaña sellada puede activarse nuevamente solo para consulta administrativa: resultados, fiscalización, acta, padrón y verificación. Esa activación no reabre votación, edición de campaña, preguntas, listas, fiscales, solicitudes ni reemisión de enlaces.
 
 ### 15. Notificación de resultados sellados
 
@@ -745,33 +746,25 @@ LIMIT 10;
 
 ---
 
-## Checklist de prueba punta a punta
+## Checklist mínimo antes de producción
 
-Antes de abrir producción real, probar con 2 o 3 usuarios internos:
+Antes de abrir producción real, validar solo los controles críticos de estabilidad, seguridad, inmutabilidad y transparencia:
 
-1. Crear campaña `VOTACION`.
-2. Configurar pregunta y opciones.
-3. Abrir ventana de registro.
-4. Registrar usuario 1.
-5. Registrar usuario 2 con otra unidad.
-6. Registrar mismo DNI en otra propiedad y confirmar que no rompe.
-7. Aprobar individualmente una solicitud.
-8. Aprobar en bloque otra solicitud.
-9. Confirmar correos recibidos.
-10. Abrir enlace antes de la votación y verificar contador.
-11. Abrir enlace durante votación y votar.
-12. Confirmar recibo de voto con opción, hash y código.
-13. Validar voto en `/verificar-voto`.
-14. Reemitir enlace a una solicitud pendiente de voto y confirmar que el link viejo no funciona.
-15. Enviar recordatorio simple a pendientes.
-16. Revisar fiscalización.
-17. Cerrar ventana de votación.
-18. Sellar campaña.
-19. Descargar acta PDF.
-20. Verificar integridad.
-21. Notificar resultados sellados.
-22. Desactivar/cerrar campaña.
-23. Confirmar que el home muestra resultados históricos.
+1. Login admin/fiscal/viewer.
+2. Crear una campaña de prueba `VOTACION`.
+3. Configurar una pregunta y dos opciones.
+4. Registrar 2 usuarios internos, aprobarlos y confirmar correo de enlace.
+5. Emitir 1 voto y confirmar recibo con código/hash.
+6. Validar el voto en `/verificar-voto`.
+7. Revisar resultados y fiscalización.
+8. Sellar la campaña.
+9. Descargar acta PDF y verificar que muestra resultados/sellos.
+10. Ejecutar verificación de integridad.
+11. Cerrar/desactivar la campaña.
+12. Activar nuevamente la campaña sellada.
+13. Confirmar que acta/resultados/fiscalización/verificación siguen accesibles.
+14. Confirmar que editar campaña, editar preguntas/listas, aprobar solicitudes, reemitir enlaces y votar quedan bloqueados.
+15. Cerrar/desactivar nuevamente la campaña sellada.
 
 ---
 
@@ -783,13 +776,17 @@ Una campaña sellada:
 - no permite aprobar solicitudes;
 - no permite reemitir enlaces;
 - no permite editar la campaña;
-- no debe poder reactivarse;
+- no permite editar preguntas, opciones, listas ni fiscales;
+- puede activarse temporalmente solo para consulta administrativa;
 - sí permite consultar resultados;
 - sí permite descargar acta;
+- sí permite descargar padrón;
 - sí permite verificar integridad;
 - sí permite gestionar admins/fiscales/viewers;
 - sí permite gestionar padrón maestro;
 - sí permite crear una nueva campaña.
+
+Activar una campaña sellada no reabre votación ni edición. Solo la publica como campaña activa de consulta para poder acceder a acta, resultados, fiscalización, padrón y verificación.
 
 ---
 
@@ -848,7 +845,6 @@ Los correos son texto plano para mejorar entregabilidad.
 - panel de progreso de envíos;
 - reintento de notificaciones fallidas;
 - export completo de auditoría;
-- limpieza de scripts históricos de patch;
 - almacenamiento de sesiones en PostgreSQL o Redis;
 - Dockerfile;
 - CI básico con `node --check`;
