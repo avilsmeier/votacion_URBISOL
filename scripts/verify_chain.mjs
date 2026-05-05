@@ -140,7 +140,7 @@ function councilPayloads(r, previous_hash) {
       token_id: r.token_id,
       cast_at,
       previous_hash,
-      chain_position: r.chain_position
+      chain_position: Number(r.chain_position)
     }
   }));
 }
@@ -155,7 +155,7 @@ function fiscalPayloads(r, previous_hash) {
       token_id: r.token_id,
       cast_at,
       previous_hash,
-      chain_position: r.chain_position
+      chain_position: Number(r.chain_position)
     }
   }));
 }
@@ -175,7 +175,7 @@ function referendumPayloads(r, previous_hash) {
         token_id: r.token_id,
         cast_at,
         previous_hash,
-        chain_position: r.chain_position
+        chain_position: Number(r.chain_position)
       }
     });
 
@@ -188,7 +188,7 @@ function referendumPayloads(r, previous_hash) {
         token_id: r.token_id,
         cast_at,
         previous_hash,
-        chain_position: r.chain_position
+        chain_position: Number(r.chain_position)
       }
     });
 
@@ -202,7 +202,7 @@ function referendumPayloads(r, previous_hash) {
         token_id: r.token_id,
         cast_at,
         previous_hash,
-        chain_position: r.chain_position
+        chain_position: Number(r.chain_position)
       }
     });
 
@@ -215,7 +215,7 @@ function referendumPayloads(r, previous_hash) {
         option_id: r.option_id,
         token_id: r.token_id,
         previous_hash,
-        chain_position: r.chain_position
+        chain_position: Number(r.chain_position)
       }
     });
 
@@ -227,7 +227,7 @@ function referendumPayloads(r, previous_hash) {
         option_id: r.option_id,
         token_id: r.token_id,
         previous_hash,
-        chain_position: r.chain_position
+        chain_position: Number(r.chain_position)
       }
     });
   }

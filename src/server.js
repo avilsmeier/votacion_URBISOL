@@ -90,7 +90,7 @@ async function insertCouncilVoteChained(client, {
     [election_id]
   )).rows[0];
 
-  const nextPos = (last?.chain_position ?? 0) + 1;
+  const nextPos = Number(last?.chain_position ?? 0) + 1;
   const previous_hash = last?.vote_hash ?? "GENESIS";
 
   // fijamos cast_at desde DB (misma fuente de tiempo)
@@ -143,7 +143,7 @@ async function insertFiscalVoteChained(client, {
     [election_id]
   )).rows[0];
 
-  const nextPos = (last?.chain_position ?? 0) + 1;
+  const nextPos = Number(last?.chain_position ?? 0) + 1;
   const previous_hash = last?.vote_hash ?? "GENESIS";
   const cast_at = (await client.query("SELECT now() AS t")).rows[0].t;
 
@@ -195,7 +195,7 @@ async function insertReferendumVoteChained(client, {
     [election_id]
   )).rows[0];
 
-  const nextPos = (last?.chain_position ?? 0) + 1;
+  const nextPos = Number(last?.chain_position ?? 0) + 1;
   const previous_hash = last?.vote_hash ?? "GENESIS";
   const cast_at = (await client.query("SELECT now() AS t")).rows[0].t;
 
