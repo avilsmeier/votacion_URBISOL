@@ -1852,7 +1852,6 @@ app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
      FROM registrations r
      JOIN units u ON u.id = r.unit_id
      WHERE r.election_id=$1 ${where}
-     GROUP BY r.id, u.label
      ORDER BY r.created_at DESC`,
     params
   )).rows;
@@ -1900,12 +1899,11 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const reg = (await q(
     `SELECT r.*, u.label AS unit_label,
-            COUNT(*) FILTER (WHERE r2.status IN ('PENDING','APPROVED'))::int AS duplicate_open_count,
-            COUNT(*) FILTER (WHERE r2.status='PENDING')::int AS duplicate_pending_count,
-            COUNT(*) FILTER (WHERE r2.status='APPROVED')::int AS duplicate_approved_count
+            (SELECT COUNT(*)::int FROM registrations r2 WHERE r2.election_id=r.election_id AND r2.unit_id=r.unit_id AND r2.id<>r.id AND r2.status IN ('PENDING','APPROVED')) AS duplicate_open_count,
+            (SELECT COUNT(*)::int FROM registrations r2 WHERE r2.election_id=r.election_id AND r2.unit_id=r.unit_id AND r2.id<>r.id AND r2.status='PENDING') AS duplicate_pending_count,
+            (SELECT COUNT(*)::int FROM registrations r2 WHERE r2.election_id=r.election_id AND r2.unit_id=r.unit_id AND r2.id<>r.id AND r2.status='APPROVED') AS duplicate_approved_count
      FROM registrations r
      JOIN units u ON u.id=r.unit_id
-     LEFT JOIN registrations r2 ON r2.election_id=r.election_id AND r2.unit_id=r.unit_id AND r2.id<>r.id
      WHERE r.id=$1 AND r.election_id=$2`,
     [id, active.id]
   )).rows[0];
