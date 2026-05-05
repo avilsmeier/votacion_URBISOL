@@ -930,7 +930,7 @@ app.post("/registro", async (req, res) => {
     election_id: election.id,
     registration_id: r.rows[0].id,
     meta_json: { name: name.trim() },
-    send: () => sendRegistrationReceived({ to: email.trim().toLowerCase(), name: name.trim(), electionTitle: election.title })
+    send: () => sendRegistrationReceived({ to: email.trim().toLowerCase(), name: name.trim(), electionTitle: election.title, unitLabel: unit.label })
   });
 
   res.render("register_done", { election });
@@ -1399,8 +1399,8 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   await withTx(pool, async (client) => {
     await client.query(`UPDATE vote_tokens SET status='REVOKED' WHERE election_id=$1 AND registration_id=$2 AND status='ACTIVE'`, [active.id, reg.id]);
     const tr = await client.query(
-      `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, created_by_admin_id)
-       VALUES ($1,$2,$3,$4,'ACTIVE',$5)
+      `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, issued_via)
+       VALUES ($1,$2,$3,$4,'ACTIVE','EMAIL')
        RETURNING id`,
       [active.id, reg.id, reg.unit_id, tokenHash]
     );
@@ -1864,75 +1864,75 @@ app.get("/admin/solicitudes/:id", requireViewerOrAdmin, async (req, res) => {
   });
 });
 
+// APPROVAL_EMAIL_DELIVERY_STABLE_ROUTE
 app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.render("no_active");
+  if (!active) return res.status(500).send("No hay campaña activa.");
+  if (await isElectionSealed(active.id)) return res.status(403).send("La campaña ya fue sellada. No se pueden aprobar solicitudes.");
 
   const id = Number(req.params.id);
+  const reg = (await q(
+    `SELECT r.*, u.label AS unit_label
+     FROM registrations r
+     JOIN units u ON u.id=r.unit_id
+     WHERE r.id=$1 AND r.election_id=$2`,
+    [id, active.id]
+  )).rows[0];
 
-  const rr = await q(
-    `UPDATE registrations
-     SET status='APPROVED', reviewed_at=NOW(), reviewed_by=$2
-     WHERE id=$1 AND election_id=$3 AND status='PENDING'
-     RETURNING id, unit_id, email`,
-    [id, req.session.admin.id, active.id]
-  );
+  if (!reg) return res.status(404).send("Solicitud no encontrada.");
+  if (reg.status !== "PENDING") return res.status(400).send("Solo se pueden aprobar solicitudes pendientes.");
+  if (!reg.email) return res.status(400).send("La solicitud no tiene correo electrónico.");
 
-  if (!rr.rows.length) return res.redirect(`/admin/solicitudes/${id}`);
+  const raw = newToken();
+  const tokenHash = hashToken(raw);
+  let tokenId;
 
-  const { unit_id, email } = rr.rows[0];
+  await withTx(pool, async (client) => {
+    await client.query(
+      `UPDATE registrations
+       SET status='APPROVED', reviewed_at=NOW(), reviewed_by=$1, notes=COALESCE(notes,'')
+       WHERE id=$2 AND status='PENDING'`,
+      [req.session.admin.id, reg.id]
+    );
 
-  // revoca tokens activos previos de la unidad
-  await q(`UPDATE vote_tokens SET status='REVOKED' WHERE election_id=$1 AND unit_id=$2 AND status='ACTIVE'`, [active.id, unit_id]);
-
-  const token = newToken();
-  const tokenHash = hashToken(token);
-
-  const tr = await q(
-    `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, issued_via)
-     VALUES ($1,$2,$3,$4,'EMAIL')
-     RETURNING id`,
-    [active.id, id, unit_id, tokenHash]
-  );
-
-  const tokenId = tr.rows[0].id;
-  const link = `${process.env.BASE_URL}/votar/${token}`;
-
-  await audit("REGISTRATION_APPROVED_TOKEN_ISSUED", {
-    actor_admin_id: req.session.admin.id,
-    election_id: active.id,
-    registration_id: id,
-    unit_id,
-    token_id: tokenId,
-    meta_json: { issued_via: "EMAIL" }
+    const tr = await client.query(
+      `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, issued_via)
+       VALUES ($1,$2,$3,$4,'ACTIVE','EMAIL')
+       RETURNING id`,
+      [active.id, reg.id, reg.unit_id, tokenHash]
+    );
+    tokenId = tr.rows[0].id;
   });
 
-  // Siempre intentamos enviar por correo
-  try {
-    const sent = await sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: r.unit_label });
-    await audit("TOKEN_EMAIL_SENT", {
-      actor_admin_id: req.session.admin.id,
-      election_id: active.id,
-      registration_id: id,
-      unit_id,
-      token_id: tokenId,
-      meta_json: { sent }
-    });
-  } catch (e) {
-    await audit("TOKEN_EMAIL_FAILED", {
-      actor_admin_id: req.session.admin.id,
-      election_id: active.id,
-      registration_id: id,
-      unit_id,
-      token_id: tokenId,
-      meta_json: { error: String(e?.message || e) }
-    });
-  }
+  const link = absoluteUrl(`/votar/${raw}`);
+  const sent = await sendEmailNotification({
+    template: "registration_approved",
+    recipient: reg.email,
+    election_id: active.id,
+    registration_id: reg.id,
+    meta_json: { token_id: tokenId, unit_label: reg.unit_label },
+    send: () => sendVoteLink({
+      to: reg.email,
+      link,
+      electionTitle: active.title,
+      voteOpenAt: active.vote_open_at,
+      voteCloseAt: active.vote_close_at,
+      unitLabel: reg.unit_label
+    })
+  });
 
-  // Mostrar link para respaldo (si email falla o el vecino lo pide)
-  res.render("admin_link_issued", { admin: req.session.admin, election: active, link, registrationId: id });
+  await audit("REGISTRATION_APPROVED", {
+    actor_admin_id: req.session.admin.id,
+    election_id: active.id,
+    registration_id: reg.id,
+    unit_id: reg.unit_id,
+    token_id: tokenId,
+    meta_json: { via: "EMAIL", sent }
+  });
+
+  const tokenRow = { id: tokenId, status: "ACTIVE", issued_at: new Date(), used_at: null };
+  res.render("admin_request_detail", { admin: req.session.admin, r: { ...reg, status: "APPROVED" }, tokenRow, link, sent });
 });
-
 app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
   if (!active) return res.render("no_active");
