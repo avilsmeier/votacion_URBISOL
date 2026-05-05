@@ -4,8 +4,10 @@ import pg from "pg";
 const { Pool } = pg;
 
 const electionId = Number(process.argv[2]);
+const allowLegacyStoredHash = process.argv.includes("--allow-legacy-stored-hash");
+
 if (!electionId) {
-  console.error("Uso: node scripts/verify_chain.mjs <election_id>");
+  console.error("Uso: node scripts/verify_chain.mjs <election_id> [--allow-legacy-stored-hash]");
   process.exit(1);
 }
 
@@ -27,6 +29,7 @@ function castAtVariants(r) {
   if (r.cast_at !== undefined && r.cast_at !== null) vals.push(r.cast_at);
   if (r.cast_at instanceof Date) vals.push(r.cast_at.toISOString());
   if (r.cast_at_text) vals.push(r.cast_at_text);
+  if (r.cast_at instanceof Date) vals.push(r.cast_at.toISOString().replace("T", " ").replace("Z", "+00"));
 
   const out = [];
   const seen = new Set();
@@ -64,6 +67,7 @@ async function verifyTable(table, payloadBuilder, kind) {
   let concatenated = "";
   let expectedPosition = 1;
   const formatsUsed = new Set();
+  let legacyStoredHashCount = 0;
 
   for (const r of rows) {
     if (Number(r.chain_position) !== expectedPosition) {
@@ -75,14 +79,21 @@ async function verifyTable(table, payloadBuilder, kind) {
     }
 
     const candidates = variantsForPayloads(payloadBuilder(r, prevHash));
-    const match = candidates.find(c => sha256Hex(JSON.stringify(c.payload)) === r.vote_hash);
+    let match = candidates.find(c => sha256Hex(JSON.stringify(c.payload)) === r.vote_hash);
+
+    if (!match && allowLegacyStoredHash) {
+      // Modo explícito para votos de prueba emitidos durante parches intermedios.
+      // No valida recomputación del payload; solo valida posición, previous_hash y sello global.
+      match = { name: "legacy_stored_hash_only", payload: null };
+      legacyStoredHashCount++;
+    }
 
     if (!match) {
-      const debug = candidates.slice(0, 6).map(c => {
+      const debug = candidates.slice(0, 12).map(c => {
         const h = sha256Hex(JSON.stringify(c.payload));
         return `${c.name}: ${h}`;
       }).join("\n  ");
-      throw new Error(`❌ Hash inválido en ${kind}, posición ${r.chain_position}. Hash guardado: ${r.vote_hash}\n  Probados:\n  ${debug}`);
+      throw new Error(`❌ Hash inválido en ${kind}, posición ${r.chain_position}. Hash guardado: ${r.vote_hash}\n  Probados:\n  ${debug}\n\nNota: si este voto fue emitido durante los parches de prueba previos a estabilización, puedes inspeccionarlo con:\n  node scripts/verify_chain.mjs ${electionId} --allow-legacy-stored-hash\nPara producción real, crea una campaña limpia y verifica sin ese flag.`);
     }
 
     formatsUsed.add(match.name);
@@ -111,8 +122,12 @@ async function verifyTable(table, payloadBuilder, kind) {
   console.log("✔ Cadena íntegra.");
   console.log("Total votos:", rows.length);
   console.log("Formato hash:", Array.from(formatsUsed).join(", ") || "sin votos");
+  if (legacyStoredHashCount) {
+    console.log(`⚠️ ${legacyStoredHashCount} voto(s) verificado(s) en modo legacy_stored_hash_only.`);
+    console.log("⚠️ Este modo NO recompone el payload del voto; solo sirve para campañas de prueba/transición.");
+  }
   console.log("Global hash:", globalHash);
-  return { kind, totalVotes: rows.length, globalHash, sealed: !!seal, formatsUsed: Array.from(formatsUsed) };
+  return { kind, totalVotes: rows.length, globalHash, sealed: !!seal, formatsUsed: Array.from(formatsUsed), legacyStoredHashCount };
 }
 
 function councilPayloads(r, previous_hash) {
@@ -164,7 +179,6 @@ function referendumPayloads(r, previous_hash) {
       }
     });
 
-    // Compatibilidad con votos emitidos por parches intermedios durante el desarrollo.
     out.push({
       name: `legacy_no_question_id${suffix}`,
       payload: {
@@ -191,6 +205,31 @@ function referendumPayloads(r, previous_hash) {
         chain_position: r.chain_position
       }
     });
+
+    out.push({
+      name: `legacy_no_cast_at${suffix}`,
+      payload: {
+        election_id: r.election_id,
+        unit_id: r.unit_id,
+        question_id: r.question_id,
+        option_id: r.option_id,
+        token_id: r.token_id,
+        previous_hash,
+        chain_position: r.chain_position
+      }
+    });
+
+    out.push({
+      name: `legacy_no_question_no_cast_at${suffix}`,
+      payload: {
+        election_id: r.election_id,
+        unit_id: r.unit_id,
+        option_id: r.option_id,
+        token_id: r.token_id,
+        previous_hash,
+        chain_position: r.chain_position
+      }
+    });
   }
   return out;
 }
@@ -202,6 +241,10 @@ function referendumPayloads(r, previous_hash) {
 
     console.log(`Campaña: ${election.title}`);
     console.log(`Tipo: ${election.kind || "ELECCION"}`);
+
+    if (allowLegacyStoredHash) {
+      console.log("⚠️ Modo legacy habilitado. Usar solo para campañas de prueba/transición.");
+    }
 
     if (election.kind === "VOTACION") {
       await verifyTable("referendum_votes", referendumPayloads, "REFERENDUM");
