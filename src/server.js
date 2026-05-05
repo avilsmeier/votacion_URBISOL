@@ -302,6 +302,15 @@ app.post("/admin/seal", requireAdmin, async (req, res) => {
   const election = await getActiveElection();
   if (!election) return res.status(400).send("No hay elección activa.");
 
+  // SEAL_IDEMPOTENT_ALREADY_SEALED
+  const existingSeals = (await q(`SELECT kind, global_hash AS "globalHash", total_votes AS "totalVotes" FROM election_seals WHERE election_id=$1 ORDER BY kind ASC`, [election.id])).rows;
+  if (existingSeals.length) {
+    const council = existingSeals.find(s => s.kind === "COUNCIL") || null;
+    const fiscal = existingSeals.find(s => s.kind === "FISCAL") || null;
+    const referendum = existingSeals.find(s => s.kind === "REFERENDUM") || null;
+    return res.render("seal_result", { election, council, fiscal, referendum });
+  }
+
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
@@ -1270,7 +1279,8 @@ async function getFiscalizationRows(electionId) {
             rv.cast_at, rv.chain_position, rv.previous_hash, rv.vote_hash
      FROM referendum_votes rv
      JOIN units u ON u.id=rv.unit_id
-     JOIN registrations r ON r.election_id=rv.election_id AND r.unit_id=rv.unit_id
+     JOIN vote_tokens vt ON vt.id=rv.token_id
+     JOIN registrations r ON r.id=vt.registration_id
      JOIN referendum_options ro ON ro.id=rv.option_id
      WHERE rv.election_id=$1
      ORDER BY rv.chain_position ASC`,
@@ -1281,7 +1291,8 @@ async function getFiscalizationRows(electionId) {
             v.cast_at, v.chain_position, v.previous_hash, v.vote_hash
      FROM votes v
      JOIN units u ON u.id=v.unit_id
-     JOIN registrations r ON r.election_id=v.election_id AND r.unit_id=v.unit_id
+     JOIN vote_tokens vt ON vt.id=v.token_id
+     JOIN registrations r ON r.id=vt.registration_id
      JOIN candidates c ON c.id=v.candidate_id
      WHERE v.election_id=$1
      ORDER BY v.chain_position ASC`,
@@ -1524,10 +1535,6 @@ app.post("/admin/elections/new", requireAdmin, async (req, res) => {
 
 app.post("/admin/elections/:id/activate", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  if (await isElectionSealed(id)) {
-    await audit("ELECTION_ACTIVATE_BLOCKED_SEALED", { actor_admin_id: req.session.admin.id, election_id: id });
-    return res.status(403).send("Esta campaña ya fue sellada y no puede reactivarse. Los resultados permanecen disponibles en el histórico.");
-  }
   
 
   await q(`UPDATE elections SET is_active=false WHERE is_active=true`);
