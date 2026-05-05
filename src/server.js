@@ -1370,6 +1370,7 @@ app.post("/admin/recordatorios-voto", requireAdmin, async (req, res) => {
   res.render("vote_pending_reminders", { admin: req.session.admin, election, rows, stats, lastResult: { sent, failed, total: rows.length } });
 });
 
+// REISSUE_SHOW_BACKUP_LINK_ROUTE
 app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
   if (!active) return res.status(500).send("No hay campaña activa.");
@@ -1386,6 +1387,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
 
   if (!reg) return res.status(404).send("Solicitud no encontrada.");
   if (reg.status !== "APPROVED") return res.status(400).send("Solo se puede reemitir enlace a solicitudes aprobadas.");
+  if (!reg.email) return res.status(400).send("La solicitud no tiene correo electrónico.");
 
   const alreadyVoted = active.kind === "VOTACION"
     ? (await q(`SELECT 1 FROM referendum_votes WHERE election_id=$1 AND unit_id=$2 LIMIT 1`, [active.id, reg.unit_id])).rows.length > 0
@@ -1413,14 +1415,29 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
     recipient: reg.email,
     election_id: active.id,
     registration_id: reg.id,
-    meta_json: { token_id: tokenId, reissue: true },
-    send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: reg.unit_label })
+    meta_json: { token_id: tokenId, reissue: true, unit_label: reg.unit_label },
+    send: () => sendVoteLink({
+      to: reg.email,
+      link,
+      electionTitle: active.title,
+      voteOpenAt: active.vote_open_at,
+      voteCloseAt: active.vote_close_at,
+      unitLabel: reg.unit_label
+    })
   });
 
-  await audit("TOKEN_REISSUED", { actor_admin_id: req.session.admin.id, election_id: active.id, registration_id: reg.id, unit_id: reg.unit_id, token_id: tokenId, meta_json: { sent } });
-  res.redirect(req.headers.referer || "/admin/recordatorios-voto");
-});
+  await audit("TOKEN_REISSUED", {
+    actor_admin_id: req.session.admin.id,
+    election_id: active.id,
+    registration_id: reg.id,
+    unit_id: reg.unit_id,
+    token_id: tokenId,
+    meta_json: { sent }
+  });
 
+  const tokenRow = { id: tokenId, status: "ACTIVE", issued_at: new Date(), used_at: null };
+  return res.render("admin_request_detail", { admin: req.session.admin, r: reg, tokenRow, link, sent });
+});
 /* =========================
    ADMIN: LOGIN
 ========================= */
