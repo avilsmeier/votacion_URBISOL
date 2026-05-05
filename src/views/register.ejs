@@ -4,6 +4,13 @@
     ${regOpen ? `
       <p class="muted">Registro para voto digital. Correo y teléfono son obligatorios para enviar el enlace único.</p>
 
+      <div style="padding:12px; border:1px solid #eee; border-radius:10px; margin:14px 0">
+        <b>Importante:</b>
+        <p class="muted" style="margin:6px 0 0">
+          El derecho de voto se ejerce por unidad o propiedad habilitada. Si representas más de una propiedad, registra cada unidad por separado.
+        </p>
+      </div>
+
       <form method="POST" action="/registro">
         <div class="form-grid">
           <div class="full">
@@ -46,7 +53,7 @@
         </div>
 
         <p class="muted" style="margin-top:14px">
-          El Consejo Directivo revisará esta solicitud. Si es aprobada, se enviará un enlace único por correo.
+          El Consejo Directivo revisará esta solicitud. Si es aprobada, se enviará un enlace único por correo para esta unidad.
         </p>
 
         <button class="ok" type="submit">Enviar solicitud</button>
