@@ -12,6 +12,13 @@
     <p><b>Email:</b> ${r.email || "-"}</p>
     <p><b>Estado:</b> ${r.status}</p>
 
+    ${Number(r.detail_duplicate_open_count || 0) > 0 ? `
+      <div style="padding:12px; border:1px solid #f59e0b; background:#fffbeb; border-radius:10px; margin:14px 0">
+        <b>⚠️ Posible duplicado de unidad</b>
+        <p class="muted" style="margin-bottom:0">Hay ${r.detail_duplicate_open_count} otra(s) solicitud(es) pendiente(s) o aprobada(s) para esta misma unidad. Antes de aprobar, verifica cuál corresponde conservar.</p>
+      </div>
+    ` : ``}
+
     ${typeof link !== "undefined" && link ? `
       <div style="padding:12px; border:1px solid #eee; border-radius:10px; margin:14px 0">
         <h3 style="margin-top:0">Enlace generado</h3>

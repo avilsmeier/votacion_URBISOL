@@ -30,6 +30,7 @@
         ${filter === "pending" && typeof admin !== "undefined" && admin && admin.role === "admin" ? `<th align="left">Sel.</th>` : ``}
         <th align="left">Fecha</th>
         <th align="left">Unidad</th>
+        <th align="left">Alerta</th>
         <th align="left">Nombre</th>
         <th align="left">Email</th>
         <th align="left">Estado</th>
@@ -39,6 +40,7 @@
           ${filter === "pending" && typeof admin !== "undefined" && admin && admin.role === "admin" ? `<td><input type="checkbox" name="registration_ids" value="${r.id}" style="width:auto" checked /></td>` : ``}
           <td>${new Date(r.created_at).toLocaleString("es-PE")}</td>
           <td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>
+          <td>${Number(r.duplicate_open_count || 0) > 0 ? `<span title="Hay otra solicitud pendiente/aprobada para esta misma unidad" style="font-weight:bold; color:#b45309">⚠️ Duplicado</span>` : ``}</td>
           <td>${r.name}</td>
           <td>${r.email || "-"}</td>
           <td><b>${r.status}</b></td>

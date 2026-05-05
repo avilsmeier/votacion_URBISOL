@@ -1781,6 +1781,15 @@ app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
 
     if (!reg || reg.status !== "PENDING" || !reg.email) { skipped++; continue; }
 
+    // BULK_DUPLICATE_APPROVED_UNIT_GUARD
+    const unitAlreadyApproved = (await q(
+      `SELECT 1 FROM registrations
+       WHERE election_id=$1 AND unit_id=$2 AND status='APPROVED' AND id<>$3
+       LIMIT 1`,
+      [active.id, reg.unit_id, reg.id]
+    )).rows.length > 0;
+    if (unitAlreadyApproved) { skipped++; continue; }
+
     const raw = newToken();
     const tokenHash = hashToken(raw);
     let tokenId;
@@ -1843,6 +1852,7 @@ app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
      FROM registrations r
      JOIN units u ON u.id = r.unit_id
      WHERE r.election_id=$1 ${where}
+     GROUP BY r.id, u.label
      ORDER BY r.created_at DESC`,
     params
   )).rows;
@@ -1889,9 +1899,13 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
 
   const id = Number(req.params.id);
   const reg = (await q(
-    `SELECT r.*, u.label AS unit_label
+    `SELECT r.*, u.label AS unit_label,
+            COUNT(*) FILTER (WHERE r2.status IN ('PENDING','APPROVED'))::int AS duplicate_open_count,
+            COUNT(*) FILTER (WHERE r2.status='PENDING')::int AS duplicate_pending_count,
+            COUNT(*) FILTER (WHERE r2.status='APPROVED')::int AS duplicate_approved_count
      FROM registrations r
      JOIN units u ON u.id=r.unit_id
+     LEFT JOIN registrations r2 ON r2.election_id=r.election_id AND r2.unit_id=r.unit_id AND r2.id<>r.id
      WHERE r.id=$1 AND r.election_id=$2`,
     [id, active.id]
   )).rows[0];
@@ -1899,6 +1913,18 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
   if (!reg) return res.status(404).send("Solicitud no encontrada.");
   if (reg.status !== "PENDING") return res.status(400).send("Solo se pueden aprobar solicitudes pendientes.");
   if (!reg.email) return res.status(400).send("La solicitud no tiene correo electrónico.");
+
+  // APPROVE_DUPLICATE_APPROVED_UNIT_GUARD
+  const unitAlreadyApproved = (await q(
+    `SELECT id, name, email FROM registrations
+     WHERE election_id=$1 AND unit_id=$2 AND status='APPROVED' AND id<>$3
+     ORDER BY reviewed_at DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [active.id, reg.unit_id, reg.id]
+  )).rows[0];
+  if (unitAlreadyApproved) {
+    return res.status(400).send(`Esta unidad ya tiene una solicitud aprobada (ID ${unitAlreadyApproved.id}). Rechaza o revisa el duplicado antes de aprobar otra.`);
+  }
 
   const raw = newToken();
   const tokenHash = hashToken(raw);
