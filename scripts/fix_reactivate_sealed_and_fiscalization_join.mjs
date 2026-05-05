@@ -52,7 +52,7 @@ apply("make seal route idempotent", txt => {
   const guard = `
 
   // SEAL_IDEMPOTENT_ALREADY_SEALED
-  const existingSeals = (await q(\`SELECT kind, global_hash AS \"globalHash\", total_votes AS \"totalVotes\" FROM election_seals WHERE election_id=$1 ORDER BY kind ASC\`, [election.id])).rows;
+  const existingSeals = (await q(\`SELECT kind, global_hash AS "globalHash", total_votes AS "totalVotes" FROM election_seals WHERE election_id=$1 ORDER BY kind ASC\`, [election.id])).rows;
   if (existingSeals.length) {
     const council = existingSeals.find(s => s.kind === "COUNCIL") || null;
     const fiscal = existingSeals.find(s => s.kind === "FISCAL") || null;
@@ -67,10 +67,18 @@ fs.writeFileSync(serverFile, s);
 if (fs.existsSync(dashboardFile)) {
   let d = fs.readFileSync(dashboardFile, "utf8");
   const before = d;
+
+  // Repara variantes rotas anteriores y deja Activar visible aunque este sellada.
   d = d.replace(
     '${Number(e.seals_count || 0) > 0 ? ` | <span class="muted">Sellada</span>` : ` | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>`}',
-    '` | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}`'
+    '| <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}'
   );
+
+  d = d.replace(
+    '` | <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}`',
+    '| <form style="display:inline" method="POST" action="/admin/elections/${e.id}/activate"><button type="submit">Activar</button></form>${Number(e.seals_count || 0) > 0 ? ` <span class="muted">(sellada)</span>` : ``}'
+  );
+
   if (d !== before) {
     fs.writeFileSync(dashboardFile, d);
     changed = true;
