@@ -219,6 +219,28 @@ async function insertReferendumVoteChained(client, {
 // Cloudflare/Nginx proxy
 app.set("trust proxy", 1);
 
+// SECURITY_HEADERS_PROD_GUARD
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "img-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self'"
+    ].join("; ")
+  );
+  next();
+});
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
