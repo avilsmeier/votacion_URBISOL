@@ -2249,28 +2249,40 @@ app.get("/admin/export/auditoria.csv", requireViewerOrAdmin, async (req, res) =>
 /* =========================
    ADMIN: vista impresión
 ========================= */
-app.get("/admin/print/padron", requireViewerOrAdmin, async (req, res) => {
-  const active = await getActiveElection();
-  const rows = (await q(
-  `SELECT
-     u.label AS unidad,
-     r.status::text AS registro_estado,
-     COALESCE(vt.status::text, '-') AS token_estado,
-     CASE WHEN v.id IS NULL THEN 'NO' ELSE 'SI' END AS voto_emitido
-   FROM registrations r
-   JOIN units u ON u.id=r.unit_id
-   LEFT JOIN LATERAL (
-     SELECT * FROM vote_tokens
-     WHERE election_id=$1 AND registration_id=r.id
-     ORDER BY id DESC LIMIT 1
-   ) vt ON true
-   LEFT JOIN votes v ON v.election_id=$1 AND v.unit_id=u.id
-   WHERE r.election_id=$1
-   ORDER BY u.label ASC`,
-  [active.id]
-)).rows;
+app.get("/admin/print/padron", requireAdmin, async (req, res) => {
+  const election = await getActiveElection();
+  if (!election) return res.status(400).send("No hay campaña activa.");
 
-  res.render("admin_print_padron", { election: active, rows });
+  // PRINT_PADRON_VOTE_STATUS_BY_TOKEN
+  // El estado de voto debe salir del voto real ligado al token usado.
+  // En campañas VOTACION el voto vive en referendum_votes, no en votes.
+  const rows = (await q(`
+    SELECT
+      u.label AS unidad,
+      r.status AS registro_estado,
+      COALESCE(vt.status, '-') AS token_estado,
+      CASE
+        WHEN rv.id IS NOT NULL OR cv.id IS NOT NULL OR fv.id IS NOT NULL THEN 'SI'
+        ELSE 'NO'
+      END AS voto_emitido
+    FROM registrations r
+    JOIN units u ON u.id = r.unit_id
+    LEFT JOIN LATERAL (
+      SELECT id, status
+      FROM vote_tokens
+      WHERE registration_id = r.id
+      ORDER BY id DESC
+      LIMIT 1
+    ) vt ON true
+    LEFT JOIN referendum_votes rv ON rv.token_id = vt.id AND rv.election_id = r.election_id
+    LEFT JOIN votes cv ON cv.token_id = vt.id AND cv.election_id = r.election_id
+    LEFT JOIN fiscal_votes fv ON fv.token_id = vt.id AND fv.election_id = r.election_id
+    WHERE r.election_id = $1
+      AND r.status = 'APPROVED'
+    ORDER BY u.label ASC, r.id ASC
+  `, [election.id])).rows;
+
+  res.render("admin_print_padron", { election, rows });
 });
 
 /* =========================
