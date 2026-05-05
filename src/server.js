@@ -714,23 +714,28 @@ async function upsertResidentRegistry({ unit_id, name, dni, phone, email, status
   const nameN = String(name || "").trim();
   if (!unit_id || !nameN) return null;
 
+  // Una persona puede tener mas de una propiedad. Por eso el match es por unidad
+  // y luego por algun dato de identidad/contacto. No usamos DNI/email globalmente.
   const found = (await q(
     `SELECT id FROM resident_registry
-     WHERE ($1::text IS NOT NULL AND lower(dni)=lower($1))
-        OR ($2::text IS NOT NULL AND lower(email)=lower($2))
-        OR ($3::text IS NOT NULL AND phone=$3)
+     WHERE unit_id=$1
+       AND (
+         ($2::text IS NOT NULL AND lower(COALESCE(dni,''))=lower($2))
+         OR ($3::text IS NOT NULL AND lower(COALESCE(email,''))=lower($3))
+         OR ($4::text IS NOT NULL AND phone=$4)
+       )
      ORDER BY id ASC
      LIMIT 1`,
-    [dniN, emailN, phoneN]
+    [unit_id, dniN, emailN, phoneN]
   )).rows[0];
 
   if (found) {
     return (await q(
       `UPDATE resident_registry
-       SET unit_id=$1, name=$2, dni=$3, phone=$4, email=$5, status=$6, notes=COALESCE($7, notes), updated_at=now()
-       WHERE id=$8
+       SET name=$1, dni=$2, phone=$3, email=$4, status=$5, notes=COALESCE($6, notes), updated_at=now()
+       WHERE id=$7
        RETURNING id`,
-      [unit_id, nameN, dniN, phoneN, emailN, status, notes, found.id]
+      [nameN, dniN, phoneN, emailN, status, notes, found.id]
     )).rows[0];
   }
 
@@ -1208,7 +1213,7 @@ app.post("/votar/:token/referendum", async (req, res) => {
     await c.query("COMMIT");
 
     await audit("REFERENDUM_VOTE_CAST", { election_id: election.id, unit_id: vt.unit_id, token_id: vt.id, meta_json: { question_id: question.id, option_id }});
-    const regForReceipt = (await q(`SELECT id, email FROM registrations WHERE id=$1`, [vt.registration_id])).rows[0];
+    const regForReceipt = (await q(`SELECT r.id, r.email, u.label AS unit_label FROM registrations r JOIN units u ON u.id=r.unit_id WHERE r.id=$1`, [vt.registration_id])).rows[0];
     await sendEmailNotification({
       template: "vote_receipt",
       recipient: regForReceipt?.email,
