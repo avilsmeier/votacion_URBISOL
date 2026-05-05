@@ -3,8 +3,12 @@ import fs from "fs";
 const file = "src/server.js";
 let s = fs.readFileSync(file, "utf8");
 
+// Reparacion puntual si ya se aplico una version anterior con COALESCE(enum, '-').
+s = s.replaceAll("COALESCE(vt.status, '-') AS token_estado", "COALESCE(vt.status::text, '-') AS token_estado");
+
 if (s.includes("PRINT_PADRON_VOTE_STATUS_BY_TOKEN")) {
-  console.log("[OK] print padron vote status ya estaba aplicado");
+  fs.writeFileSync(file, s);
+  console.log("[OK] print padron vote status ya estaba aplicado; enum cast corregido si hacia falta");
   process.exit(0);
 }
 
@@ -89,7 +93,7 @@ const route = `app.get("/admin/print/padron", requireAdmin, async (req, res) => 
     SELECT
       u.label AS unidad,
       r.status AS registro_estado,
-      COALESCE(vt.status, '-') AS token_estado,
+      COALESCE(vt.status::text, '-') AS token_estado,
       CASE
         WHEN rv.id IS NOT NULL OR cv.id IS NOT NULL OR fv.id IS NOT NULL THEN 'SI'
         ELSE 'NO'
