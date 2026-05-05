@@ -11,7 +11,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { q, pool } from "./db.js";
 import { newToken, hashToken } from "./crypto.js";
-import { canMail, sendVoteLink, sendAdminInvite, sendRegistrationReceived, sendVoteReceipt, sendElectionSealed, sendVotePendingReminder } from "./mailer.js";
+import { canMail, sendVoteLink, sendAdminInvite, sendRegistrationReceived, sendRegistrationRejected, sendVoteReceipt, sendElectionSealed, sendVotePendingReminder } from "./mailer.js";
 import { requireAdmin, requireFiscalOrAdmin, requireViewerOrAdmin } from "./middleware.js";
 import { createActaPdfHandler } from "./actaPdf.js";
 import { createAudit } from "./audit.js";
@@ -2063,30 +2063,65 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
 
 app.post("/admin/solicitudes/:id/rechazar", requireAdmin, async (req, res) => {
   const active = await getActiveElection();
-  if (!active) return res.render("no_active");
+  if (!active) return res.status(500).send("No hay campaña activa.");
+  if (await isElectionSealed(active.id)) return res.status(403).send("La campaña ya fue sellada. No se pueden rechazar solicitudes.");
 
   const id = Number(req.params.id);
-  const notes = String(req.body.notes || "").trim() || null;
+  const notes = String(req.body.notes || "").trim();
+  const reg = (await q(
+    `SELECT r.*, u.label AS unit_label
+     FROM registrations r
+     JOIN units u ON u.id=r.unit_id
+     WHERE r.id=$1 AND r.election_id=$2`,
+    [id, active.id]
+  )).rows[0];
 
-  const rr = await q(
+  if (!reg) return res.status(404).send("Solicitud no encontrada.");
+  if (reg.status !== "PENDING") return res.status(400).send("Solo se pueden rechazar solicitudes pendientes.");
+
+  await q(
     `UPDATE registrations
-     SET status='REJECTED', reviewed_at=NOW(), reviewed_by=$2, notes=$3
-     WHERE id=$1 AND election_id=$4 AND status='PENDING'
-     RETURNING id, unit_id`,
-    [id, req.session.admin.id, notes, active.id]
+     SET status='REJECTED', reviewed_at=NOW(), reviewed_by=$1, notes=$2
+     WHERE id=$3`,
+    [req.session.admin.id, notes, id]
   );
 
-  if (rr.rows.length) {
-    await audit("REGISTRATION_REJECTED", {
-      actor_admin_id: req.session.admin.id,
+  let sent = false;
+  if (reg.email) {
+    sent = await sendEmailNotification({
+      template: "registration_rejected",
+      recipient: reg.email,
       election_id: active.id,
-      registration_id: id,
-      unit_id: rr.rows[0].unit_id,
-      meta_json: { notes }
+      registration_id: reg.id,
+      meta_json: { unit_label: reg.unit_label, has_reason: !!notes },
+      send: () => sendRegistrationRejected({
+        to: reg.email,
+        electionTitle: active.title,
+        reason: notes,
+        unitLabel: reg.unit_label
+      })
+    });
+  } else {
+    await logNotification({
+      election_id: active.id,
+      registration_id: reg.id,
+      template: "registration_rejected",
+      recipient: "",
+      status: "SKIPPED",
+      error: "missing recipient",
+      meta_json: { unit_label: reg.unit_label }
     });
   }
 
-  res.redirect(`/admin/solicitudes/${id}`);
+  await audit("REGISTRATION_REJECTED", {
+    actor_admin_id: req.session.admin.id,
+    election_id: active.id,
+    registration_id: reg.id,
+    unit_id: reg.unit_id,
+    meta_json: { notes, sent }
+  });
+
+  res.redirect("/admin/solicitudes?filter=pending");
 });
 
 /* =========================
