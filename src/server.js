@@ -1433,7 +1433,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
       `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, created_by_admin_id)
        VALUES ($1,$2,$3,$4,'ACTIVE',$5)
        RETURNING id`,
-      [active.id, reg.id, reg.unit_id, tokenHash, req.session.admin.id]
+      [active.id, reg.id, reg.unit_id, tokenHash]
     );
     tokenId = tr.rows[0].id;
   });
@@ -1807,10 +1807,10 @@ app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
         [req.session.admin.id, reg.id]
       );
       const tr = await client.query(
-        `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, created_by_admin_id, issued_via)
-         VALUES ($1,$2,$3,$4,'ACTIVE',$5,'EMAIL')
+        `INSERT INTO vote_tokens(election_id, registration_id, unit_id, token_hash, status, issued_via)
+         VALUES ($1,$2,$3,$4,'ACTIVE','EMAIL')
          RETURNING id`,
-        [active.id, reg.id, reg.unit_id, tokenHash, req.session.admin.id]
+        [active.id, reg.id, reg.unit_id, tokenHash]
       );
       tokenId = tr.rows[0].id;
     });
