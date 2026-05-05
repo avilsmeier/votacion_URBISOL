@@ -1769,6 +1769,8 @@ app.post("/admin/residentes/importar-campana", requireAdmin, async (req, res) =>
    ADMIN: Solicitudes + aprobación (email por defecto)
 ========================= */
 app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
+  // BULK_APPROVE_SAFE_ROUTE
+  try {
   const active = await getActiveElection();
   if (!active) return res.status(500).send("No hay campaña activa.");
   if (await isElectionSealed(active.id)) return res.status(403).send("La campaña ya fue sellada. No se pueden aprobar solicitudes.");
@@ -1830,6 +1832,12 @@ app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
 
   await audit("REGISTRATION_BULK_APPROVED", { actor_admin_id: req.session.admin.id, election_id: active.id, meta_json: { requested: ids.length, approved, sent, failed, skipped } });
   res.redirect(`/admin/solicitudes?filter=pending&bulk=1&approved=${approved}&sent=${sent}&failed=${failed}&skipped=${skipped}`);
+  } catch (e) {
+    console.error("bulk approve failed", e);
+    await audit("REGISTRATION_BULK_APPROVE_FAILED", { actor_admin_id: req.session.admin.id, election_id: active?.id ?? null, meta_json: { error: String(e?.message || e) } });
+    return res.status(500).send("Error aprobando solicitudes en bloque. Revisa los logs del servidor.");
+  }
+  // BULK_APPROVE_SAFE_ROUTE_END
 });
 app.get("/admin/solicitudes", requireViewerOrAdmin, async (req, res) => {
   const active = await getActiveElection();
