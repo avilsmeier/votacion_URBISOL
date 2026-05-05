@@ -108,12 +108,12 @@ if (fs.existsSync(requestsViewFile)) {
   const before = v;
   if (!v.includes("duplicate_open_count")) {
     v = v.replace(
-      `<th align="left">Unidad</th>`,
-      `<th align="left">Unidad</th>\n        <th align="left">Alerta</th>`
+      '<th align="left">Unidad</th>',
+      '<th align="left">Unidad</th>\n        <th align="left">Alerta</th>'
     );
     v = v.replace(
-      `<td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>`,
-      `<td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>\n          <td>${Number(r.duplicate_open_count || 0) > 0 ? `<span title="Hay otra solicitud pendiente/aprobada para esta misma unidad" style="font-weight:bold; color:#b45309">⚠️ Duplicado</span>` : ``}</td>`
+      '<td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>',
+      '<td><a href="/admin/solicitudes/${r.id}">${r.unit_label}</a></td>\n          <td>${Number(r.duplicate_open_count || 0) > 0 ? `<span title="Hay otra solicitud pendiente/aprobada para esta misma unidad" style="font-weight:bold; color:#b45309">⚠️ Duplicado</span>` : ``}</td>'
     );
   }
   if (v !== before) {
@@ -130,8 +130,8 @@ if (fs.existsSync(detailViewFile)) {
   const before = v;
   if (!v.includes("detail_duplicate_open_count")) {
     v = v.replace(
-      `<p><b>Estado:</b> ${r.status}</p>`,
-      `<p><b>Estado:</b> ${r.status}</p>\n\n    ${Number(r.detail_duplicate_open_count || 0) > 0 ? `\n      <div style="padding:12px; border:1px solid #f59e0b; background:#fffbeb; border-radius:10px; margin:14px 0">\n        <b>⚠️ Posible duplicado de unidad</b>\n        <p class="muted" style="margin-bottom:0">Hay ${r.detail_duplicate_open_count} otra(s) solicitud(es) pendiente(s) o aprobada(s) para esta misma unidad. Antes de aprobar, verifica cuál corresponde conservar.</p>\n      </div>\n    ` : ``}`
+      '<p><b>Estado:</b> ${r.status}</p>',
+      '<p><b>Estado:</b> ${r.status}</p>\n\n    ${Number(r.detail_duplicate_open_count || 0) > 0 ? `\n      <div style="padding:12px; border:1px solid #f59e0b; background:#fffbeb; border-radius:10px; margin:14px 0">\n        <b>⚠️ Posible duplicado de unidad</b>\n        <p class="muted" style="margin-bottom:0">Hay ${r.detail_duplicate_open_count} otra(s) solicitud(es) pendiente(s) o aprobada(s) para esta misma unidad. Antes de aprobar, verifica cuál corresponde conservar.</p>\n      </div>\n    ` : ``}'
     );
   }
   if (v !== before) {
