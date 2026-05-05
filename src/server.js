@@ -1138,7 +1138,7 @@ app.post("/votar/:token/referendum", async (req, res, next) => {
       meta_json: { question_id: question.id, option_id, vote_hash: vote.vote_hash, chain_position: vote.chain_position }
     });
 
-    const regForReceipt = (await q(`SELECT id, email FROM registrations WHERE id=$1`, [vt.registration_id])).rows[0];
+    const regForReceipt = (await q(`SELECT r.id, r.email, u.label AS unit_label FROM registrations r JOIN units u ON u.id=r.unit_id WHERE r.id=$1`, [vt.registration_id])).rows[0];
     const optionText = `${selectedOption.option_label ? selectedOption.option_label + ". " : ""}${selectedOption.option_text}`;
 
     await sendEmailNotification({
@@ -1150,6 +1150,7 @@ app.post("/votar/:token/referendum", async (req, res, next) => {
       send: () => sendVoteReceipt({
         to: regForReceipt.email,
         electionTitle: election.title,
+        unitLabel: regForReceipt?.unit_label,
         castAt: new Date(vote.cast_at).toLocaleString("es-PE", { timeZone: "America/Lima" }),
         optionText,
         voteHash: vote.vote_hash,
@@ -1392,7 +1393,7 @@ app.post("/admin/recordatorios-voto", requireAdmin, async (req, res) => {
       election_id: election.id,
       registration_id: r.registration_id,
       meta_json: { no_link: true, unit_label: r.unit_label },
-      send: () => sendVotePendingReminder({ to: r.email, electionTitle: election.title, voteOpenAt: election.vote_open_at, voteCloseAt: election.vote_close_at })
+      send: () => sendVotePendingReminder({ to: r.email, electionTitle: election.title, voteOpenAt: election.vote_open_at, voteCloseAt: election.vote_close_at, unitLabel: r.unit_label })
     });
     if (ok) sent++; else failed++;
   }
@@ -1445,7 +1446,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
     election_id: active.id,
     registration_id: reg.id,
     meta_json: { token_id: tokenId, reissue: true },
-    send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at })
+    send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: reg.unit_label })
   });
 
   await audit("TOKEN_REISSUED", { actor_admin_id: req.session.admin.id, election_id: active.id, registration_id: reg.id, unit_id: reg.unit_id, token_id: tokenId, meta_json: { sent } });
@@ -1823,7 +1824,7 @@ app.post("/admin/solicitudes/bulk-approve", requireAdmin, async (req, res) => {
       election_id: active.id,
       registration_id: reg.id,
       meta_json: { token_id: tokenId, bulk: true },
-      send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at })
+      send: () => sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: reg.unit_label })
     });
     if (ok) sent++; else failed++;
 
@@ -1940,7 +1941,7 @@ app.post("/admin/solicitudes/:id/aprobar", requireAdmin, async (req, res) => {
 
   // Siempre intentamos enviar por correo
   try {
-    const sent = await sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });
+    const sent = await sendVoteLink({ to: email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: r.unit_label });
     await audit("TOKEN_EMAIL_SENT", {
       actor_admin_id: req.session.admin.id,
       election_id: active.id,
@@ -1999,7 +2000,7 @@ app.post("/admin/solicitudes/:id/reemitir", requireAdmin, async (req, res) => {
   });
 
   try {
-    const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at });
+    const sent = await sendVoteLink({ to: reg.email, link, electionTitle: active.title, voteOpenAt: active.vote_open_at, voteCloseAt: active.vote_close_at, unitLabel: reg.unit_label });
     await audit("TOKEN_EMAIL_SENT", {
       actor_admin_id: req.session.admin.id,
       election_id: active.id,
