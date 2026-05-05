@@ -1,0 +1,11 @@
+<%- include('layout', { title: "Resultados disponibles al cierre", body: `
+  <div class="card">
+    <h2>Resultados disponibles al cierre</h2>
+    <p><b>${election.title}</b></p>
+    <p class="muted">Los resultados de esta campaña se publicarán cuando cierre la ventana de votación.</p>
+    <p><b>Cierre programado:</b> ${new Date(election.vote_close_at).toLocaleString("es-PE")}</p>
+    <div style="margin-top:14px">
+      <a href="/"><button type="button">Volver</button></a>
+    </div>
+  </div>
+` }) %>
