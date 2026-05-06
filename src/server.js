@@ -2260,7 +2260,7 @@ app.get("/admin/print/padron", requireAdmin, async (req, res) => {
     SELECT
       u.label AS unidad,
       r.status AS registro_estado,
-      COALESCE(vt.status, '-') AS token_estado,
+      COALESCE(vt.status::text, '-') AS token_estado,
       CASE
         WHEN rv.id IS NOT NULL OR cv.id IS NOT NULL OR fv.id IS NOT NULL THEN 'SI'
         ELSE 'NO'
