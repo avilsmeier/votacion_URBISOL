@@ -2,29 +2,30 @@
   <div class="card">
     <h2>Campaña sellada correctamente</h2>
     <p><b>${election?.title || "Campaña"}</b></p>
+    <p class="muted">El sello de integridad quedó registrado. La campaña permanece disponible para consulta, acta, fiscalización y verificación.</p>
 
     ${referendum ? `
       <h3>Votación interna / Referéndum</h3>
-      <p>Total votos: ${referendum.totalVotes}</p>
-      <p>Hash global:</p>
+      <p><b>Total votos:</b> ${referendum.totalVotes}</p>
+      <p><b>Hash global:</b></p>
       <pre style="white-space:pre-wrap; word-break:break-all">${referendum.globalHash}</pre>
     ` : ``}
 
     ${council ? `
       <h3>Directiva</h3>
-      <p>Total votos: ${council.totalVotes}</p>
-      <p>Hash global:</p>
+      <p><b>Total votos:</b> ${council.totalVotes}</p>
+      <p><b>Hash global:</b></p>
       <pre style="white-space:pre-wrap; word-break:break-all">${council.globalHash}</pre>
     ` : ``}
 
     ${fiscal ? `
       <h3>Fiscales</h3>
-      <p>Total votos: ${fiscal.totalVotes}</p>
-      <p>Hash global:</p>
+      <p><b>Total votos:</b> ${fiscal.totalVotes}</p>
+      <p><b>Hash global:</b></p>
       <pre style="white-space:pre-wrap; word-break:break-all">${fiscal.globalHash}</pre>
     ` : ``}
 
-    <p>Publica estos hashes inmediatamente en el grupo oficial.</p>
+    <p class="muted">Conserva estos hashes junto con el acta oficial.</p>
 
     <div class="row" style="margin-top:12px">
       <a href="/admin/acta.pdf?v=${Date.now()}" target="_blank" rel="noopener"><button>Acta PDF</button></a>
